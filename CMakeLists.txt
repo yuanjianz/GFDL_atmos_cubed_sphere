@@ -56,8 +56,7 @@ endif ()
 
 esma_add_library (${this}
   SRCS ${srcs}
-  DEPENDENCIES MAPL_Base 
-  INCLUDES ${extra_incs} ${INC_ESMF} ${INC_NETCDF})
+  DEPENDENCIES MAPL_Base)
 
 if (FV_PRECISION STREQUAL R4)
    target_compile_definitions (${this} PRIVATE -DSINGLE_FV -DOVERLOAD_R4)
