@@ -1,5 +1,4 @@
-cmake_minimum_required(VERSION 3.14.1)
-project(mapz LANGUAGES Fortran)
+esma_set_this()
 
 set(srcs
   ../fv_mapz.F90
@@ -23,23 +22,18 @@ set(srcs
   output/output.f90
   main.F90)
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
+if (FV_PRECISION STREQUAL R4)
+  set(GFDL GFDL_fms_r4)
+elseif (FV_PRECISION STREQUAL R4R8) # FV is R4 but FMS is R8
+  set(GFDL GFDL_fms_r8)
+elseif (FV_PRECISION STREQUAL R8)
+   set(GFDL GFDL_fms_r8)
+endif ()
 
-# Dependency - MPI
-find_package(MPI REQUIRED)
-message(STATUS "MPI Fortran libraries: ${MPI_Fortran_LIBRARIES}")
-
-# Baselibs
-find_package(Baselibs REQUIRED)
-
-# Dependency - GFDL FMS
-include(${CMAKE_CURRENT_LIST_DIR}/cmake/gfdl-fms.cmake)
-
-add_executable(mapz ${srcs})
-target_link_libraries(
-  mapz
-  ${FMS_LIBRARIES}
-  ${MPI_Fortran_LIBRARIES}
-  ${NETCDF_LIBRARIES} ${MPI_LIBRARIES})
-target_compile_definitions(mapz PRIVATE MAPL_MODE SPMD TIMING MAPZ_DRIVER_DEBUG)
-target_compile_options(mapz PRIVATE -traceback)
+ecbuild_add_executable(
+  TARGET mapz-driver
+  SOURCES ${srcs}
+  LIBS ${GFDL} ${MAPL_BASE})
+target_compile_definitions(mapz-driver PRIVATE MAPL_MODE SPMD TIMING)
+target_compile_options(mapz-driver PRIVATE -traceback)
+set_target_properties(${this} PROPERTIES Fortran_MODULE_DIRECTORY ${esma_include}/${this})
