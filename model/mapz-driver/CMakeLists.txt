@@ -14,9 +14,13 @@ set(srcs
   stubs/fv_grid_utils_stub.f90
   stubs/external_ic_stub.F90
   
-  input_types.f90
-  input.f90
-  output.f90
+  input/input_array_extents.f90
+  input/input_scalars.f90
+  input/input_arrays.f90
+  input/input_flagstruct.f90
+  input/input_gridstruct.f90
+  input/input_domain_layout.f90
+  output/output.f90
   main.F90)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)

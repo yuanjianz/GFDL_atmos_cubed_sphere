@@ -8,10 +8,12 @@ program Main
   use mpp_domains_mod, only: domain2d
   use external_ic_mod, only: mpp_domain_decomp
   
-  use input_types_mod, only: ArrayExtents_T, Scalars_T, Arrays_T
-  use input_mod, only: get_domain_layout, get_npx_npy
-  use input_mod, only: get_input_array_extents, get_input_scalars, get_input_arrays
-  use input_mod, only: get_input_flagstruct, get_input_gridstruct
+  use input_array_extents_mod, only: ArrayExtents_T, get_input_array_extents
+  use input_scalars_mod, only: Scalars_T, get_input_scalars
+  use input_arrays_mod, only: Arrays_T, get_input_arrays
+  use input_flagstruct_mod, only: get_input_flagstruct
+  use input_gridstruct_mod, only: get_input_gridstruct
+  use input_domain_layout_mod, only: get_domain_layout, get_npx_npy
   use output_mod, only: Output_T, get_output
   
   implicit none
