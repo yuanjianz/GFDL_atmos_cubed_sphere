@@ -3,7 +3,7 @@ module input_arrays_mod
   use fv_arrays_mod, only: fv_grid_bounds_type, fv_grid_type
 
   implicit none
-  
+
   private
 
   public InputArrays_T
@@ -20,7 +20,7 @@ module input_arrays_mod
   end interface InputArrays_T
 
 contains
-  
+
   function input_arrays_initialize_(bd, npx, npy, gridstruct) result(arrays)
 
     ! Arguments
@@ -60,7 +60,7 @@ contains
   end subroutine initialize_q_
 
   subroutine initialize_ra_x_(bd, area, xfx, ra_x)
-    
+
     ! Arguments
     type(fv_grid_bounds_type), intent(in) :: bd
     real, intent(in) :: area(:,:)
@@ -70,16 +70,17 @@ contains
     integer :: j, i
 
     allocate(ra_x(bd%is:bd%ie, bd%jsd:bd%jed))
-    do j = bd%jsd, bd%jed
-       do i = bd%is, bd%ie
-          ra_x(i,j) = area(i,j) + (xfx(i,j) - xfx(i+1,j))
-       end do
-    end do
+    ! do j = bd%jsd, bd%jed
+    !    do i = bd%is, bd%ie
+    !       ra_x(i,j) = area(i,j) + (xfx(i,j) - xfx(i+1,j))
+    !    end do
+    ! end do
+    ra_x = 1.0
 
   end subroutine initialize_ra_x_
 
   subroutine initialize_ra_y_(bd, area, yfx, ra_y)
-    
+
     ! Arguments
     type(fv_grid_bounds_type), intent(in) :: bd
     real, intent(in) :: area(:,:)
@@ -89,11 +90,12 @@ contains
     integer :: j, i
 
     allocate(ra_y(bd%isd:bd%ied, bd%js:bd%je))
-    do j = bd%js, bd%je
-       do i = bd%isd, bd%ied
-          ra_y(i,j) = area(i,j) + (yfx(i,j) - yfx(i,j+1))
-       end do
-    end do
+    ! do j = bd%js, bd%je
+    !    do i = bd%isd, bd%ied
+    !       ra_y(i,j) = area(i,j) + (yfx(i,j) - yfx(i,j+1))
+    !    end do
+    ! end do
+    ra_y = 1.0
 
   end subroutine initialize_ra_y_
 
