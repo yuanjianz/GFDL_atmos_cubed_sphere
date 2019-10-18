@@ -1,5 +1,4 @@
-cmake_minimum_required(VERSION 3.14.1)
-project(tp-core-driver LANGUAGES Fortran CXX)
+esma_set_this()
 
 set(srcs
   ../tp_core.F90
@@ -11,5 +10,11 @@ set(srcs
   driver_cpu.f90
   main.f90)
 
-add_executable(tp-core-driver-cpu ${srcs})
-target_compile_options(tp-core-driver-cpu PRIVATE -g -traceback)
+# add_executable(tp-core-driver-cpu ${srcs})
+# target_compile_options(tp-core-driver-cpu PRIVATE -g -traceback)
+
+ecbuild_add_executable(
+  TARGET tp-core-driver
+  SOURCES ${srcs})
+target_compile_options(tp-core-driver PRIVATE -traceback)
+set_target_properties(${this} PROPERTIES Fortran_MODULE_DIRECTORY ${esma_include}/${this})
