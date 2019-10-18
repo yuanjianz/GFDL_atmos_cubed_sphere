@@ -10,9 +10,6 @@ set(srcs
   driver_cpu.f90
   main.f90)
 
-# add_executable(tp-core-driver-cpu ${srcs})
-# target_compile_options(tp-core-driver-cpu PRIVATE -g -traceback)
-
 ecbuild_add_executable(
   TARGET tp-core-driver
   SOURCES ${srcs})
