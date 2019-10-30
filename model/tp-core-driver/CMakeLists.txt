@@ -13,5 +13,5 @@ set(srcs
 ecbuild_add_executable(
   TARGET tp-core-driver
   SOURCES ${srcs})
-target_compile_options(tp-core-driver PRIVATE -traceback)
+target_compile_options(tp-core-driver PRIVATE ${TRACEBACK})
 set_target_properties(${this} PROPERTIES Fortran_MODULE_DIRECTORY ${esma_include}/${this})
