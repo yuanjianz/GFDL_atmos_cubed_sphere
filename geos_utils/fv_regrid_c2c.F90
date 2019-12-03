@@ -13,17 +13,7 @@ module fv_regrid_c2c
    use tracer_manager_mod, only: get_tracer_names, get_number_tracers, get_tracer_index
    use field_manager_mod,  only: MODEL_ATMOS
 
-   use MAPL_MOD,          only: MAPL_PI_R8, MAPL_OMEGA, MAPL_GRAV, &
-         MAPL_KAPPA, MAPL_RGAS, MAPL_RVAP, &
-         MAPL_CP
-   use MAPL_GridManagerMod
-   use MAPL_RegridderManagerMod
-   use MAPL_CubedSphereGridFactoryMod
-   use MAPL_AbstractRegridderMod
-   use MAPL_RegridderSpecMod
-   use MAPL_IOMod
-   use MAPL_ShmemMod
-   use pFIO
+   use MAPL
    use, intrinsic :: iso_fortran_env, only: REAL64, REAL32
 
    use fv_arrays_mod,     only: fv_atmos_type, fv_grid_type, fv_grid_bounds_type, FVPRC, REAL4, REAL8
