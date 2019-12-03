@@ -18,9 +18,7 @@ module external_ic_mod
 
    use constants_mod,     only: pi=>pi_8, omega, grav, kappa, rdgas, rvgas, cp_air
 #ifdef MAPL_MODE
-   use MAPL_IOMod
-   use MAPL_ShmemMod
-   use pFIO
+   use MAPL
 #endif
    use, intrinsic :: iso_fortran_env, only: REAL64, REAL32
 
