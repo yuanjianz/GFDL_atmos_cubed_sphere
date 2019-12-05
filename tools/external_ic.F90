@@ -483,7 +483,6 @@ contains
       logical            :: isNC4
       type(Netcdf4_Fileformatter) :: formatter
       type(FileMetadata), allocatable :: cfg(:)
-      type(StringIntegerMap) :: dims
       integer            :: nDims, nVars, ivar, dimSizes(3)
       character(len=128) :: vname
       real(FVPRC),   allocatable  :: gslice_r4(:,:)
