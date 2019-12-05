@@ -14,6 +14,8 @@ module fv_regrid_c2c
    use field_manager_mod,  only: MODEL_ATMOS
 
    use MAPL
+   use gFTL_StringVector
+   use gFTL_StringIntegerMap
    use, intrinsic :: iso_fortran_env, only: REAL64, REAL32
 
    use fv_arrays_mod,     only: fv_atmos_type, fv_grid_type, fv_grid_bounds_type, FVPRC, REAL4, REAL8
