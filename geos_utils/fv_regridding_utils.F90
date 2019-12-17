@@ -8,10 +8,7 @@ module fv_regridding_utils
    use fv_mp_mod,         only: is_master, ng
    use fv_mapz_mod,       only: mappm
    use mpp_mod,            only: mpp_error, FATAL, NOTE, mpp_broadcast,mpp_npes
-   !use MAPL_MOD,          only: MAPL_PI_R8, MAPL_OMEGA, MAPL_GRAV, &
-         !MAPL_KAPPA, MAPL_RGAS, MAPL_RVAP, &
-         !MAPL_CP
-   use MAPL_MOD
+   use MAPL
 
    implicit none
 

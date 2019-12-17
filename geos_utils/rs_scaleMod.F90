@@ -2,10 +2,9 @@
 module rs_scaleMod
 
    use fv_arrays_mod
-   use MAPL_ConstantsMod, only: MAPL_PSDRY
-   use MAPL_Mod
+   use MAPL
+   use gFTL_StringIntegerMap
    use ESMF
-   use pFIO_StringIntegerMapMod 
    use, intrinsic :: iso_fortran_env, only: REAL64, REAL32 
    ! bma added
    implicit none
@@ -245,7 +244,7 @@ contains
 
       deallocate(qv,qlls,qlcn,cfls,cfcn,qils,qicn,pk,pe,pke,area,dp,psold,psnew,pdryold,pdrynew)
 
-      _RETURN(ESMF_SUCCESS)
+      RETURN_(ESMF_SUCCESS)
 
    end subroutine scale_drymass
 
@@ -275,7 +274,7 @@ contains
 
     ! get VM (should get from the grid, but this is quicker)
     call ESMF_VmGetCurrent(vm, rc=status)
-    _VERIFY(STATUS)
+    VERIFY_(STATUS)
 
     im = size(area,1) ! local grid dim
     jm = size(area,2) ! local grid dim
@@ -294,7 +293,7 @@ contains
 
     call MAPL_CommsAllReduceSum(vm, sendbuf=qdumloc, recvbuf=qdum, &
          cnt=2, RC=status)
-    _VERIFY(STATUS)
+    VERIFY_(STATUS)
 
     if (qdum(2) /= 0.0_8) then
 
@@ -307,7 +306,7 @@ contains
        qave = MAPL_Undef
     end if
 
-    _RETURN(ESMF_SUCCESS)
+    RETURN_(ESMF_SUCCESS)
   end subroutine AreaMean
 
 end module rs_scaleMod
