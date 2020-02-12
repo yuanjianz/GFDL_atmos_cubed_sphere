@@ -2,10 +2,9 @@
 module rs_scaleMod
 
    use fv_arrays_mod
-   use MAPL_ConstantsMod, only: MAPL_PSDRY
-   use MAPL_Mod
+   use MAPL
+   use gFTL_StringIntegerMap
    use ESMF
-   use pFIO_StringIntegerMapMod 
    use, intrinsic :: iso_fortran_env, only: REAL64, REAL32 
    ! bma added
    implicit none

@@ -119,7 +119,7 @@ module fv_treat_da_inc_mod
   use field_manager_mod, only: MODEL_ATMOS
 
 #ifdef MAPL_MODE
-  use MAPL_MOD
+  use MAPL
 #else
   use constants_mod,     only: pi=>pi_8, omega, grav, kappa, &
                                rdgas, rvgas, cp_air
