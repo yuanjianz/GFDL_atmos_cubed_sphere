@@ -56,7 +56,7 @@ endif ()
 
 esma_add_library (${this}
   SRCS ${srcs}
-  DEPENDENCIES MAPL_Base 
+  DEPENDENCIES MAPL gftl-shared
   INCLUDES ${extra_incs} ${INC_ESMF} ${INC_NETCDF})
 
 if (FV_PRECISION STREQUAL R4)
@@ -81,6 +81,6 @@ endif()
 
 target_compile_definitions (${this} PRIVATE MAPL_MODE SPMD TIMING)
 
-
-
-
+esma_add_subdirectories(
+  model/mapz-driver
+  model/tp-core-driver)
