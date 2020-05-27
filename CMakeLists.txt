@@ -48,16 +48,20 @@ set (srcs
   geos_utils/rs_scaleMod.F90
   )
 
-if (FV_PRECISION STREQUAL R4)
-elseif (FV_PRECISION STREQUAL R4R8) # FV is R4 but FMS is R8
-   get_target_property (extra_incs fms_r4 INCLUDE_DIRECTORIES)
-elseif (FV_PRECISION STREQUAL R8)
-endif ()
 
 esma_add_library (${this}
   SRCS ${srcs}
   DEPENDENCIES MAPL gftl-shared
-  INCLUDES ${extra_incs} ${INC_ESMF} ${INC_NETCDF})
+  INCLUDES ${INC_ESMF})
+
+if (FV_PRECISION STREQUAL R4)
+elseif (FV_PRECISION STREQUAL R4R8) # FV is R4 but FMS is R8
+   get_target_property (extra_incs fms_r4 INCLUDE_DIRECTORIES)
+   target_include_directories(${this} PUBLIC ${extra_incs})
+elseif (FV_PRECISION STREQUAL R8)
+endif ()
+message("FMS EXTRA_INCS: ${extra_incs}")
+message("OTHER: ${INC_ESMF}")
 
 if (FV_PRECISION STREQUAL R4)
    target_compile_definitions (${this} PRIVATE -DSINGLE_FV -DOVERLOAD_R4)
