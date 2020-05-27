@@ -60,8 +60,6 @@ elseif (FV_PRECISION STREQUAL R4R8) # FV is R4 but FMS is R8
    target_include_directories(${this} PUBLIC ${extra_incs})
 elseif (FV_PRECISION STREQUAL R8)
 endif ()
-message("FMS EXTRA_INCS: ${extra_incs}")
-message("OTHER: ${INC_ESMF}")
 
 if (FV_PRECISION STREQUAL R4)
    target_compile_definitions (${this} PRIVATE -DSINGLE_FV -DOVERLOAD_R4)
