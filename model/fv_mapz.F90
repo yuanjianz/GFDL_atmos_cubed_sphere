@@ -323,11 +323,11 @@ contains
 ! Note: pt at this stage is Theta_v
              if ( hydrostatic ) then
 ! Transform virtual pt to virtual Temp
-             do k=1,km
+               do k=1,km
                    do i=is,ie
                       pt(i,j,k) = pt(i,j,k)*(pk(i,j,k+1)-pk(i,j,k))/(akap*(peln(i,k+1,j)-peln(i,k,j)))
                    enddo
-             enddo
+               enddo
              else
 ! Transform "density pt" to "density temp"
                do k=1,km
@@ -542,6 +542,12 @@ contains
          do i=is,ie
             pkz(i,j,k) = (pk2(i,k+1)-pk2(i,k))/(akap*(peln(i,k+1,j)-peln(i,k,j)))
          enddo
+         if (remap_pt .and. last_step .and. (.not.adiabatic) ) then
+           ! Make pt T_v
+            do i=is,ie
+               pt(i,j,k) = pt(i,j,k)*pkz(i,j,k)
+            enddo
+         endif
       enddo
    else
     ! WMP: note that this is where TE remapping non-hydrostatic is invalid and cannot be run
@@ -573,7 +579,15 @@ contains
          do k=1,km
             do i=is,ie
                pkz(i,j,k) = exp( k1k*log(rrg*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)) )
+! Using dry pressure for the definition of the virtual potential temperature
+!              pkz(i,j,k) = exp(k1k*log(rrg*(1.-q(i,j,k,sphum))*delp(i,j,k)/delz(i,j,k)*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum))))
             enddo
+            if ( last_step .and. (.not.adiabatic) ) then
+              ! Make pt T_v
+               do i=is,ie
+                  pt(i,j,k) = pt(i,j,k)*pkz(i,j,k)
+               enddo
+            endif
          enddo
       endif
    endif
@@ -702,7 +716,16 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
 
 !$OMP do
     do j=js,je
-      if (remap_t) then
+      if (remap_te) then
+          do i=is,ie
+             te_2d(i,j) = te(i,j,1)*delp(i,j,1)
+          enddo
+          do k=2,km
+             do i=is,ie
+                te_2d(i,j) = te_2d(i,j) + te(i,j,k)*delp(i,j,k)
+             enddo
+          enddo
+      else
        if ( hydrostatic ) then
             do i=is,ie
                gz(i) = hs(i,j)
@@ -755,57 +778,6 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
 #endif
            enddo   ! k-loop
        endif  ! end non-hydro
-      elseif (remap_pt) then
-         if ( hydrostatic ) then
-            do i=is,ie
-               gz(i) = hs(i,j)
-               do k=1,km
-                  gz(i) = gz(i) + cp_air*pt(i,j,k)*(pk(i,j,k+1)-pk(i,j,k))
-               enddo
-            enddo
-
-            do i=is,ie
-               te_2d(i,j) = pe(i,km+1,j)*hs(i,j) - pe(i,1,j)*gz(i)
-            enddo
-            do k=1,km
-               do i=is,ie
-                  te_2d(i,j) = te_2d(i,j) + delp(i,j,k)*(cp_air*pt(i,j,k)*pkz(i,j,k) +   &
-                               0.25*gridstruct%rsin2(i,j)*(u(i,j,k)**2+u(i,j+1,k)**2 +  &
-                                                v(i,j,k)**2+v(i+1,j,k)**2 -  &
-                            (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j)))
-               enddo
-            enddo
-         else
-!-----------------
-! Non-hydrostatic:
-!-----------------
-           do i=is,ie
-              phis(i,km+1) = hs(i,j)
-              do k=km,1,-1
-                 phis(i,k) = phis(i,k+1) - grav*delz(i,j,k)
-              enddo
-           enddo
-           do i=is,ie
-              te_2d(i,j) = 0.
-           enddo
-           do k=1,km
-              do i=is,ie
-                 te_2d(i,j) = te_2d(i,j) + delp(i,j,k)*(cv_air*pt(i,j,k)/(1.+r_vir*q(i,j,k,sphum)) + &
-                                 0.5*(phis(i,k)+phis(i,k+1) + w(i,j,k)**2 + 0.5*gridstruct%rsin2(i,j)*( &
-                                 u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
-                                (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j))))
-              enddo
-           enddo
-         endif
-      elseif (remap_te) then
-          do i=is,ie
-             te_2d(i,j) = te(i,j,1)*delp(i,j,1)
-          enddo
-          do k=2,km
-             do i=is,ie
-                te_2d(i,j) = te_2d(i,j) + te(i,j,k)*delp(i,j,k)
-             enddo
-          enddo
       endif
 
          do i=is,ie
@@ -869,11 +841,11 @@ if( last_step .and. (.not.do_adiabatic_init)  ) then
 endif        ! end last_step check
 
 ! Note: pt at this stage is T_v
-  if ( remap_t .and. (.not.do_adiabatic_init) .and. do_sat_adj ) then
-! if ( do_sat_adj ) then
+  if ( do_sat_adj ) then
                                            call timing_on('sat_adj2')
 
-#ifdef MAPL_MODE_FIX_SMALL_COND
+!#define MAPL_MODE_FIX_SMALL_COND
+#ifdef MAPL_MODE_FIX_SMALL_COND && USE_COND
    ! fix small cloud condensates
      ! Cloud
 !$OMP do
@@ -977,7 +949,25 @@ endif        ! end last_step check
 
   if ( last_step ) then
        ! Output temperature if last_step
-      if (remap_t) then
+      if (remap_te) then
+!$OMP do
+         do j=js,je
+            do i=is,ie
+               gz(i) = hs(i,j)
+            enddo
+            do k=km,1,-1
+               do i=is,ie
+                  tpe = te(i,j,k) - gz(i) - 0.25*gridstruct%rsin2(i,j)*(    &
+                        u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
+                       (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j) )
+                  dlnp = rg*(peln(i,k+1,j) - peln(i,k,j))
+                  tmp = tpe / ((cp - pe(i,k,j)*dlnp/delp(i,j,k))*(1.+r_vir*q(i,j,k,sphum)) )
+                  pt(i,j,k) =  tmp + dtmp*pkz(i,j,k) / (1.+r_vir*q(i,j,k,sphum))
+                  gz(i) = gz(i) + dlnp*tmp*(1.+r_vir*q(i,j,k,sphum))
+               enddo
+            enddo           ! end k-loop
+         enddo
+      else
 !$OMP do
         do k=1,km
            do j=js,je
@@ -1009,35 +999,9 @@ endif        ! end last_step check
 #endif
            enddo   ! j-loop
         enddo  ! k-loop
-      elseif (remap_pt) then
-!$OMP do
-        do k=1,km
-          do j=js,je
-            do i=is,ie
-               pt(i,j,k) = (pt(i,j,k) + dtmp)*pkz(i,j,k)/(1.+r_vir*q(i,j,k,sphum))
-            enddo
-          enddo
-        enddo
-      elseif (remap_te) then
-!$OMP do
-         do j=js,je
-            do i=is,ie
-               gz(i) = hs(i,j)
-            enddo
-            do k=km,1,-1
-               do i=is,ie
-                  tpe = te(i,j,k) - gz(i) - 0.25*gridstruct%rsin2(i,j)*(    &
-                        u(i,j,k)**2+u(i,j+1,k)**2 + v(i,j,k)**2+v(i+1,j,k)**2 -  &
-                       (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j) )
-                  dlnp = rg*(peln(i,k+1,j) - peln(i,k,j))
-                  tmp = tpe / ((cp - pe(i,k,j)*dlnp/delp(i,j,k))*(1.+r_vir*q(i,j,k,sphum)) )
-                  pt(i,j,k) =  tmp + dtmp*pkz(i,j,k) / (1.+r_vir*q(i,j,k,sphum))
-                  gz(i) = gz(i) + dlnp*tmp*(1.+r_vir*q(i,j,k,sphum))
-               enddo
-            enddo           ! end k-loop
-         enddo
       endif
     else  ! not last_step
+     ! Top of the loop expects PT to be Theta_V
       if (remap_t) then
 !$OMP do
          do k=1,km
@@ -1060,7 +1024,7 @@ endif        ! end last_step check
                        (u(i,j,k)+u(i,j+1,k))*(v(i,j,k)+v(i+1,j,k))*gridstruct%cosa_s(i,j) )
                   dlnp = rg*(peln(i,k+1,j) - peln(i,k,j))
                   tmp = tpe / (cp - pe(i,k,j)*dlnp/delp(i,j,k))
-                  pt(i,j,k) = (tmp/pkz(i,j,k) + dtmp)
+                  pt(i,j,k) = tmp/pkz(i,j,k)
                   gz(i) = gz(i) + dlnp*tmp
                enddo
             enddo           ! end k-loop
@@ -3593,7 +3557,7 @@ endif        ! end last_step check
         cvm(i) = (1.-(qv(i)+qd(i)))*cv_air + qv(i)*cv_vap + ql(i)*c_liq + qs(i)*c_ice
      enddo
   case default
-     call mpp_error (NOTE, 'fv_mapz::moist_cv - using default cv_air')
+    !call mpp_error (NOTE, 'fv_mapz::moist_cv - using default cv_air')
      do i=is,ie 
          qd(i) = 0.
         cvm(i) = cv_air
