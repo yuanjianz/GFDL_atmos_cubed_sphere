@@ -173,57 +173,57 @@ contains
    enddo
 
 
-   !if ( .not.hydrostatic ) then
+   if ( .not.hydrostatic ) then
 
-      !rdg = -rdgas / grav
-      !if ( present(make_nh) ) then
-          !if ( make_nh ) then
-             !delz = 1.e25 
-!!$OMP parallel do default(none) shared(ifirst,ilast,jfirst,jlast,km,delz,rdg,pt,peln)
-             !do k=1,km
-                !do j=jfirst,jlast
-                   !do i=ifirst,ilast
-                      !delz(i,j,k) = rdg*pt(i,j,k)*(peln(i,k+1,j)-peln(i,k,j))
-                   !enddo
-                !enddo
-             !enddo
-             !if(is_master()) write(*,*) 'delz computed from hydrostatic state'
-          !endif
-      !endif
+      rdg = -rdgas / grav
+      if ( present(make_nh) ) then
+          if ( make_nh ) then
+             delz = 1.e25 
+!$OMP parallel do default(none) shared(ifirst,ilast,jfirst,jlast,km,delz,rdg,pt,peln)
+             do k=1,km
+                do j=jfirst,jlast
+                   do i=ifirst,ilast
+                      delz(i,j,k) = rdg*pt(i,j,k)*(peln(i,k+1,j)-peln(i,k,j))
+                   enddo
+                enddo
+             enddo
+             if(is_master()) write(*,*) 'delz computed from hydrostatic state'
+          endif
+      endif
 
-     !if ( moist_phys ) then
-!!------------------------------------------------------------------
-!! The following form is the same as in "fv_update_phys.F90"
-!!------------------------------------------------------------------
-       !zvir = rvgas/rdgas - 1.
-!#ifdef MAPL_MODE
-       !sphum   = 1
-!#else
-       !sphum   = get_tracer_index (MODEL_ATMOS, 'sphum')
-!#endif
-!!$OMP parallel do default(none) shared(ifirst,ilast,jfirst,jlast,km,pkz,cappa,rdg, &
-!!$OMP                                  delp,pt,zvir,q,sphum,delz)
-       !do k=1,km
-          !do j=jfirst,jlast
-             !do i=ifirst,ilast
-                !pkz(i,j,k) = exp( cappa*log(rdg*delp(i,j,k)*pt(i,j,k)*    &
-                                !(1.+zvir*q(i,j,k,sphum))/delz(i,j,k)) )
-             !enddo
-          !enddo
-       !enddo
-     !else
-!!$OMP parallel do default(none) shared(ifirst,ilast,jfirst,jlast,km,pkz,cappa,rdg, &
-!!$OMP                                  delp,pt,delz)
-       !do k=1,km
-          !do j=jfirst,jlast
-             !do i=ifirst,ilast
-                !pkz(i,j,k) = exp( cappa*log(rdg*delp(i,j,k)*pt(i,j,k)/delz(i,j,k)) )
-             !enddo
-          !enddo
-       !enddo
-     !endif
+     if ( moist_phys ) then
+!------------------------------------------------------------------
+! The following form is the same as in "fv_update_phys.F90"
+!------------------------------------------------------------------
+       zvir = rvgas/rdgas - 1.
+#ifdef MAPL_MODE
+       sphum   = 1
+#else
+       sphum   = get_tracer_index (MODEL_ATMOS, 'sphum')
+#endif
+!$OMP parallel do default(none) shared(ifirst,ilast,jfirst,jlast,km,pkz,cappa,rdg, &
+!$OMP                                  delp,pt,zvir,q,sphum,delz)
+       do k=1,km
+          do j=jfirst,jlast
+             do i=ifirst,ilast
+                pkz(i,j,k) = exp( cappa*log(rdg*delp(i,j,k)*pt(i,j,k)*    &
+                                (1.+zvir*q(i,j,k,sphum))/delz(i,j,k)) )
+             enddo
+          enddo
+       enddo
+     else
+!$OMP parallel do default(none) shared(ifirst,ilast,jfirst,jlast,km,pkz,cappa,rdg, &
+!$OMP                                  delp,pt,delz)
+       do k=1,km
+          do j=jfirst,jlast
+             do i=ifirst,ilast
+                pkz(i,j,k) = exp( cappa*log(rdg*delp(i,j,k)*pt(i,j,k)/delz(i,j,k)) )
+             enddo
+          enddo
+       enddo
+     endif
 
-   !endif
+   endif
 
  end subroutine p_var
 
