@@ -57,7 +57,9 @@ esma_add_library (${this}
 if (FV_PRECISION STREQUAL R4)
 elseif (FV_PRECISION STREQUAL R4R8) # FV is R4 but FMS is R8
    get_target_property (extra_incs fms_r4 INCLUDE_DIRECTORIES)
-   target_include_directories(${this} PUBLIC ${extra_incs})
+   target_include_directories(${this} PRIVATE
+   $<BUILD_INTERFACE:${extra_incs}>
+   )
 elseif (FV_PRECISION STREQUAL R8)
 endif ()
 
