@@ -77,6 +77,7 @@ implicit none
 private
 
 
+! GCHP: parameters rescale_trop_only and show_scaling
 logical, parameter :: rescale_trop_only=.True.
 logical, parameter :: show_scaling=.False.
 
@@ -846,6 +847,9 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
                                     gridstruct, flagstruct, bd, domain, &
                                     ak, bk, ptop, npx, npy, npz,   &
                                     nq, dt, pleadv)
+                                    ! GCHP: pass extra optional argument pleadv
+                                    !nq, dt)
+
 
       use fv_mapz_mod,        only: mapn_tracer, map1_q2
       use fv_fill_mod,        only: fillz
@@ -870,6 +874,7 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
       real, intent(IN   ) ::  ak(npz+1)                  ! AK for remapping
       real, intent(IN   ) ::  bk(npz+1)                  ! BK for remapping
       real, intent(IN   ) :: ptop
+      ! GCHP: add optional argument pleadv
       real, optional, intent(OUT  ) ::pleadv(bd%is:bd%ie,bd%js:bd%je,npz+1)    ! DELP after adv_core
 ! Local Arrays
       real ::   xL(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz)  ! X-Dir for MPP Updates
@@ -898,6 +903,8 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
       integer     :: i,j,k,n,iq
 
       real :: scalingFactor
+
+      ! GCHP: define kStart
       integer :: kStart
 
       type(group_halo_update_type), save :: i_pack
@@ -956,7 +963,7 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
                         flagstruct%nord_tr, flagstruct%trdm2, flagstruct%lim_fac, dpA=dpA)
     endif
 
-    ! Build post-advection pressure edges if requested
+    ! GCHP: Build post-advection pressure edges if requested
     if (present(pleadv)) then
        pleadv(:,:,1) = ptop
        do k=2,npz+1
@@ -967,6 +974,7 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
 !------------------------------------------------------------------
 ! Re-Map constituents
 !------------------------------------------------------------------
+    ! GCHP: rescale trop only
     kStart = 0
     if (rescale_trop_only) then
        do k=1,npz
@@ -976,6 +984,7 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
           end if
        end do
     end if
+
       if( nq > 5 ) then
           do iq=1,nq
             kord_tracers(iq) = flagstruct%kord_tr
@@ -1027,6 +1036,13 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
 
        ! Rescale tracers based on ple1 at destination timestep
        !------------------------------------------------------
+       ! GCHP: rescale trop only
+       !do iq=1,nq
+       !   scalingFactor = calcScalingFactor(q3(is:ie,js:je,1:npz,iq), dp2, ple1, npx, npy, npz, gridstruct, bd)
+       !   ! Return tracers
+       !   !---------------
+       !   q(is:ie,js:je,1:npz,iq) = q3(is:ie,js:je,1:npz,iq) * scalingFactor
+       !enddo
        if (rescale_trop_only) then
           do iq=1,nq
              scalingFactor = calcScalingFactorTrop(q3(is:ie,js:je,1:npz,iq), dp2, ple1,&
@@ -1057,6 +1073,7 @@ end subroutine offline_tracer_advection
 
 !------------------------------------------------------------------------------------
 
+         ! GCHP: define function calcScalingFactorTrop
          function calcScalingFactorTrop(q1, dp2, ple1, npx, npy, npz, gridstruct, kStart, bd) result(scaling)
          use mpp_mod, only: mpp_sum
          integer, intent(in) :: npx
