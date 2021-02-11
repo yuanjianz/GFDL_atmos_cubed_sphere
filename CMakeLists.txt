@@ -51,7 +51,7 @@ set (srcs
 
 esma_add_library (${this}
   SRCS ${srcs}
-  DEPENDENCIES MAPL gftl-shared
+  DEPENDENCIES MAPL GFTL_SHARED::gftl-shared
   INCLUDES ${INC_ESMF})
 
 if (FV_PRECISION STREQUAL R4)
