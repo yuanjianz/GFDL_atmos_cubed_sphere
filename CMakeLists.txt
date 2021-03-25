@@ -85,6 +85,15 @@ endif()
 
 target_compile_definitions (${this} PRIVATE MAPL_MODE SPMD TIMING)
 
+option(HYDROSTATIC "Build FV dynamics as hydrostatic" ON)
+if (HYDROSTATIC)
+   ecbuild_info("Building FV dynamics as hydrostatic")
+else()
+   ecbuild_info("Building FV dynamics as non-hydrostatic")
+   ecbuild_info("This sets MOIST_CAPPA and USE_COND preprocessor variables")
+   target_compile_definitions (${this} PRIVATE MOIST_CAPPA USE_COND)
+endif ()
+
 esma_add_subdirectories(
   model/mapz-driver
   model/tp-core-driver)
