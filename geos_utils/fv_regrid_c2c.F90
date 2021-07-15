@@ -121,12 +121,13 @@ contains
 
       call prt_maxmin('T', Atm(1)%pt, is, ie, js, je, ng, Atm(1)%npz, 1.0_FVPRC)
 
+      Atm(1)%flagstruct%moist_phys=.false.
       call p_var(Atm(1)%npz,  is, ie, js, je, Atm(1)%ak(1),  ptop_min,         &
             Atm(1)%delp, Atm(1)%delz, Atm(1)%pt, Atm(1)%ps,               &
             Atm(1)%pe,   Atm(1)%peln, Atm(1)%pk, Atm(1)%pkz,              &
             kappa, Atm(1)%q, ng, Atm(1)%ncnst, dble(Atm(1)%gridstruct%area),Atm(1)%flagstruct%dry_mass,           &
             Atm(1)%flagstruct%adjust_dry_mass, Atm(1)%flagstruct%mountain, Atm(1)%flagstruct%moist_phys,   &
-            Atm(1)%flagstruct%hydrostatic, Atm(1)%flagstruct%nwat, Atm(1)%domain,Atm(1)%flagstruct%make_nh)
+            Atm(1)%flagstruct%hydrostatic, Atm(1)%flagstruct%nwat, Atm(1)%domain,Atm(1)%flagstruct%make_nh, do_pkz=.false.)
 
    end subroutine get_geos_ic
 
@@ -308,7 +309,7 @@ contains
             tileoff = (tile-1)*(jm/ntiles)
             do k=1,km
                call MAPL_VarRead(formatter,"U",gslice_r8,lev=k)
-               u0(is_i:ie_i,js_i:je_i,k) = gslice_r8(is_i:ie+i,tileoff+js_i:tileoff+je_i)
+               u0(is_i:ie_i,js_i:je_i,k) = gslice_r8(is_i:ie_i,tileoff+js_i:tileoff+je_i)
             enddo
          else
 !offset = sequential access: 4 + INT(6) + 8 + INT(5) + 8 + DBL(NPZ+1) + 8 + DBL(NPZ+1) + 8
@@ -324,7 +325,7 @@ contains
             tileoff = (tile-1)*(jm/ntiles)
             do k=1,km
                call MAPL_VarRead(formatter,"V",gslice_r8,lev=k)
-               v0(is_i:ie_i,js_i:je_i,k) = gslice_r8(is_i:ie+i,tileoff+js_i:tileoff+je_i)
+               v0(is_i:ie_i,js_i:je_i,k) = gslice_r8(is_i:ie_i,tileoff+js_i:tileoff+je_i)
             enddo
          else
             if (is_master()) print*, offset
@@ -370,7 +371,7 @@ contains
             tileoff = (tile-1)*(jm/ntiles)
             do k=1,km
                call MAPL_VarRead(formatter,"PT",gslice_r8,lev=k)
-               t0(is_i:ie_i,js_i:je_i,k) = gslice_r8(is_i:ie+i,tileoff+js_i:tileoff+je_i)
+               t0(is_i:ie_i,js_i:je_i,k) = gslice_r8(is_i:ie_i,tileoff+js_i:tileoff+je_i)
             enddo
          else
             if (is_master()) print*, offset
@@ -383,7 +384,7 @@ contains
          if (isNC4) then
             tileoff = (tile-1)*(jm/ntiles)
             call MAPL_VarRead(formatter,"PE",gslice_r8,lev=km+1)
-            ps0(is_i:ie_i,js_i:je_i) = gslice_r8(is_i:ie+i,tileoff+js_i:tileoff+je_i)
+            ps0(is_i:ie_i,js_i:je_i) = gslice_r8(is_i:ie_i,tileoff+js_i:tileoff+je_i)
          else
             slice_2d = npts*npts*ntiles
             do k=1,km
@@ -400,7 +401,7 @@ contains
             tileoff = (tile-1)*(jm/ntiles)
             do k=1,km
                call MAPL_VarRead(formatter,"PKZ",gslice_r8,lev=k)
-               pkz0(is_i:ie_i,js_i:je_i) = gslice_r8(is_i:ie+i,tileoff+js_i:tileoff+je_i)
+               pkz0(is_i:ie_i,js_i:je_i) = gslice_r8(is_i:ie_i,tileoff+js_i:tileoff+je_i)
                t0(is_i:ie_i,js_i:je_i,k) = t0(is_i:ie_i,js_i:je_i,k)*pkz0(is_i:ie_i,js_i:je_i)
             enddo
          else
@@ -512,7 +513,7 @@ contains
                      call mpp_update_domains(q0(:,:,k), domain_i)
                   else
                      call MAPL_VarRead(formatter,vname,gslice_r4,lev=k)
-                     q0(is_i:ie_i,js_i:je_i,k)=gslice_r4(is_i:ie+i,tileoff+js_i:tileoff+je_i)
+                     q0(is_i:ie_i,js_i:je_i,k)=gslice_r4(is_i:ie_i,tileoff+js_i:tileoff+je_i)
                   end if
                   call regridder%regrid(q0(is_i:ie_i,js_i:je_i,k),qp(:,:,k,iq),rc=status)
                enddo
@@ -582,12 +583,12 @@ contains
                      else
                         call MAPL_VarRead(formatter,vname,gslice_r4)
                      end if  
-                     qlev(is_i:ie_i,js_i:je_i)=gslice_r4(is_i:ie+i,tileoff+js_i:tileoff+je_i)
+                     qlev(is_i:ie_i,js_i:je_i)=gslice_r4(is_i:ie_i,tileoff+js_i:tileoff+je_i)
                   end if
                   if (tracer_bundles(ifile)%vars(ivar)%nLev/=1) then
-                        call regridder%regrid(qlev(is_i:ie_i,js_i:js_i),tracer_bundles(ifile)%vars(ivar)%ptr3d(is:ie,js:je,k),rc=status)
+                        call regridder%regrid(qlev(is_i:ie_i,js_i:je_i),tracer_bundles(ifile)%vars(ivar)%ptr3d(is:ie,js:je,k),rc=status)
                   else
-                        call regridder%regrid(qlev(is_i:ie_i,js_i:js_i),tracer_bundles(ifile)%vars(ivar)%ptr2d(is:ie,js:je),rc=status)
+                        call regridder%regrid(qlev(is_i:ie_i,js_i:je_i),tracer_bundles(ifile)%vars(ivar)%ptr2d(is:ie,js:je),rc=status)
                   end if
                enddo
                !call prt_maxmin( 'Q_geos_gocart', q0, is_i, ie_i, js_i, je_i, ng_i, km, 1._FVPRC)
