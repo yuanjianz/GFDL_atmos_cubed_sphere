@@ -117,6 +117,15 @@ contains
    real ratio(ifirst:ilast)
    real pek, lnp, ak1, rdg, dpd, zvir
    integer i, j, k
+#ifdef MAPL_MODE
+   logical :: do_pkz_
+
+   if (present(do_pkz)) then
+      do_pkz_ = do_pkz
+   else
+      do_pkz_ = .true.
+   end if
+#endif
 
 ! Check dry air mass & compute the adjustment amount:
    if ( adjust_dry_mass )      &
@@ -200,7 +209,7 @@ contains
       endif
 
 #ifdef MAPL_MODE
-     if (do_pkz) then
+     if (do_pkz_) then
 #endif
      if ( moist_phys ) then
 !------------------------------------------------------------------
