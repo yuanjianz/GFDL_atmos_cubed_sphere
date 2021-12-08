@@ -43,9 +43,6 @@ set (srcs
   tools/external_sst.F90
   tools/fv_nudge.F90
   model/fv_nesting.F90
-  geos_utils/fv_regrid_c2c.F90
-  geos_utils/fv_regridding_utils.F90
-  geos_utils/rs_scaleMod.F90
   )
 
 if (ESMA_USE_GFE_NAMESPACE)
