@@ -45,17 +45,9 @@ set (srcs
   model/fv_nesting.F90
   )
 
-if (ESMA_USE_GFE_NAMESPACE)
-   esma_add_library (${this}
-      SRCS ${srcs}
-      DEPENDENCIES MAPL GFTL_SHARED::gftl-shared
-      INCLUDES ${INC_ESMF})
-else ()
-   esma_add_library (${this}
-      SRCS ${srcs}
-      DEPENDENCIES MAPL gftl-shared
-      INCLUDES ${INC_ESMF})
-endif ()
+esma_add_library (${this}
+  SRCS ${srcs}
+  DEPENDENCIES MAPL GFTL_SHARED::gftl-shared esmf)
 
 if (FV_PRECISION STREQUAL R4)
 elseif (FV_PRECISION STREQUAL R4R8) # FV is R4 but FMS is R8
