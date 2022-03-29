@@ -43,28 +43,11 @@ set (srcs
   tools/external_sst.F90
   tools/fv_nudge.F90
   model/fv_nesting.F90
-  geos_utils/fv_regrid_c2c.F90
-  geos_utils/fv_regridding_utils.F90
-  geos_utils/rs_scaleMod.F90
   )
 
-if (ESMA_USE_GFE_NAMESPACE)
-   esma_add_library (${this}
-      SRCS ${srcs}
-      # GCHP: list ESMF in dependencies rather than includes
-      #DEPENDENCIES MAPL GFTL_SHARED::gftl-shared
-      #INCLUDES ${INC_ESMF})
-      DEPENDENCIES MAPL gftl-shared ESMF
-   )
-else ()
-   esma_add_library (${this}
-      SRCS ${srcs}
-      # GCHP: list ESMF in dependencies rather than includes
-      #DEPENDENCIES MAPL gftl-shared
-      #INCLUDES ${INC_ESMF})
-      DEPENDENCIES MAPL gftl-shared ESMF
-   )
-endif ()
+esma_add_library (${this}
+  SRCS ${srcs}
+  DEPENDENCIES MAPL GFTL_SHARED::gftl-shared esmf)
 
 if (FV_PRECISION STREQUAL R4)
 elseif (FV_PRECISION STREQUAL R4R8) # FV is R4 but FMS is R8
@@ -96,6 +79,9 @@ if (CRAY_POINTER)
 endif()
 
 target_compile_definitions (${this} PRIVATE MAPL_MODE SPMD TIMING)
+
+# Enable OpenMP
+target_link_libraries(${this} PRIVATE OpenMP::OpenMP_Fortran)
 
 option(HYDROSTATIC "Build FV dynamics as hydrostatic" ON)
 if (HYDROSTATIC)

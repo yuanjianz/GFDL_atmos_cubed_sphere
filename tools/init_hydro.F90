@@ -79,7 +79,12 @@ contains
  subroutine p_var(km, ifirst, ilast, jfirst, jlast, ptop, ptop_min,    &
                   delp, delz, pt, ps,  pe, peln, pk, pkz, cappa, q, ng, nq, area,   &
                   dry_mass, adjust_dry_mass, mountain, moist_phys,      &
-                  hydrostatic, nwat, domain, make_nh)
+                  hydrostatic, nwat, domain, make_nh &
+#ifdef MAPL_MODE
+                  ,do_pkz)
+#else
+                  )
+#endif
 ! Given (ptop, delp) computes (ps, pk, pe, peln, pkz)
 ! Input:
    integer,  intent(in):: km
@@ -95,6 +100,9 @@ contains
    real, intent(inout)::    q(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng, km, nq)
    real(kind=R_GRID), intent(IN)   :: area(ifirst-ng:ilast+ng,jfirst-ng:jlast+ng)
    logical, optional:: make_nh
+#ifdef MAPL_MODE
+   logical, intent(in), optional :: do_pkz
+#endif
 ! Output:
    real, intent(out) ::   ps(ifirst-ng:ilast+ng, jfirst-ng:jlast+ng)
    real, intent(out) ::   pk(ifirst:ilast, jfirst:jlast, km+1)
@@ -109,6 +117,15 @@ contains
    real ratio(ifirst:ilast)
    real pek, lnp, ak1, rdg, dpd, zvir
    integer i, j, k
+#ifdef MAPL_MODE
+   logical :: do_pkz_
+
+   if (present(do_pkz)) then
+      do_pkz_ = do_pkz
+   else
+      do_pkz_ = .true.
+   end if
+#endif
 
 ! Check dry air mass & compute the adjustment amount:
    if ( adjust_dry_mass )      &
@@ -191,6 +208,9 @@ contains
           endif
       endif
 
+#ifdef MAPL_MODE
+     if (do_pkz_) then
+#endif
      if ( moist_phys ) then
 !------------------------------------------------------------------
 ! The following form is the same as in "fv_update_phys.F90"
@@ -222,6 +242,9 @@ contains
           enddo
        enddo
      endif
+#ifdef MAPL_MODE
+     end if
+#endif
 
    endif
 
