@@ -846,9 +846,9 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
 subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
                                     gridstruct, flagstruct, bd, domain, &
                                     ak, bk, ptop, npx, npy, npz,   &
-                                    nq, dt, pleadv)
+                                    nq, dt, pleadv, sphu1)
                                     ! GCHP: pass extra optional argument pleadv
-                                    !nq, dt)
+                                    !nq, dt, sphu1)
 
 
       use fv_mapz_mod,        only: mapn_tracer, map1_q2
@@ -876,6 +876,7 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
       real, intent(IN   ) :: ptop
       ! GCHP: add optional argument pleadv
       real, optional, intent(OUT  ) ::pleadv(bd%is:bd%ie,bd%js:bd%je,npz+1)    ! DELP after adv_core
+      real, optional, intent(IN   ) ::sphu1(bd%is:bd%ie,bd%js:bd%je,npz)       ! Interpolated humidity
 ! Local Arrays
       real ::   xL(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz)  ! X-Dir for MPP Updates
       real ::   yL(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)  ! Y-Dir for MPP Updates
@@ -898,6 +899,8 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
       real  pe2(bd%is:bd%ie,npz+1)
       real  dp2(bd%is:bd%ie,bd%js:bd%je,npz)
       integer kord_tracers(nq)
+! GCHP Pressure Arrays
+      real dpL1(bd%is:bd%ie,bd%js:bd%je,npz)
 
 ! Local indices
       integer     :: i,j,k,n,iq
@@ -949,6 +952,7 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
 
 ! Fill local tracers and pressure thickness
     dpL(bd%is:bd%ie,bd%js:bd%je,:) = ple0(:,:,2:npz+1) - ple0(:,:,1:npz)
+    dpL1(bd%is:bd%ie,bd%js:bd%je,:) = ple1(:,:,2:npz+1) - ple1(:,:,1:npz)
     q3(is:ie,js:je,:,:) = q(is:ie,js:je,:,:)
     call start_group_halo_update(i_pack, q3, domain)
 
@@ -1044,8 +1048,18 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
        !   q(is:ie,js:je,1:npz,iq) = q3(is:ie,js:je,1:npz,iq) * scalingFactor
        !enddo
        if (rescale_trop_only) then
-          do iq=1,nq
-             scalingFactor = calcScalingFactorTrop(q3(is:ie,js:je,1:npz,iq), dp2, ple1,&
+          if (present(sphu1)) then
+             dp2(is:ie,js:je,1:npz) = dp2(is:ie,js:je,1:npz) &
+                  * (1.0d0-q3(is:ie,js:je,1:npz,nq))
+             dpL1(is:ie,js:je,1:npz) = dpL1(is:ie,js:je,1:npz) &
+                  * (1.0d0-sphu1(is:ie,js:je,1:npz))
+             do iq=1,nq-1
+                q3(is:ie,js:je,1:npz,iq) = q3(is:ie,js:je,1:npz,iq) &
+                     / (1.0d0-q3(is:ie,js:je,1:npz,nq))
+             enddo
+          endif
+          do iq=1,nq-1
+             scalingFactor = calcScalingFactorTrop(q3(is:ie,js:je,1:npz,iq), dp2, dpL1,&
                                                    npx, npy, npz, gridstruct, kStart, bd)
              ! Return tracers
              !---------------
@@ -1074,14 +1088,14 @@ end subroutine offline_tracer_advection
 !------------------------------------------------------------------------------------
 
          ! GCHP: define function calcScalingFactorTrop
-         function calcScalingFactorTrop(q1, dp2, ple1, npx, npy, npz, gridstruct, kStart, bd) result(scaling)
+         function calcScalingFactorTrop(q1, dp2, dpL1, npx, npy, npz, gridstruct, kStart, bd) result(scaling)
          use mpp_mod, only: mpp_sum
          integer, intent(in) :: npx
          integer, intent(in) :: npy
          integer, intent(in) :: npz
          real, intent(in) :: q1(:,:,:)
          real, intent(in) :: dp2(:,:,:)
-         real, intent(in) :: ple1(:,:,:)
+         real, intent(in) :: dpL1(:,:,:)
          type(fv_grid_type), intent(IN   ) :: gridstruct
          integer, intent(in) :: kStart
          type(fv_grid_bounds_type), intent(IN   ) :: bd
@@ -1103,7 +1117,7 @@ end subroutine offline_tracer_advection
             ! numerator: mass based on advected air
             partialSums(1,k) = sum(q1(:,:,k)*dp2(:,:,k)*gridstruct%area(bd%is:bd%ie,bd%js:bd%je))
             ! denominator: mass based on met field pressures after advection
-            tempSum = sum(q1(:,:,k)*(ple1(:,:,k+1)-ple1(:,:,k))*gridstruct%area(bd%is:bd%ie,bd%js:bd%je))
+            tempSum = sum(q1(:,:,k)*dpL1(:,:,k)*gridstruct%area(bd%is:bd%ie,bd%js:bd%je))
             partialSums(2,k) = tempSum
             if (k.lt.kStart) then
                ! In stratosphere
