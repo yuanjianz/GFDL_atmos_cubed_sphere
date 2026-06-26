@@ -78,7 +78,7 @@ private
 
 
 ! GCHP: parameters rescale_trop_only and show_scaling
-logical, parameter :: rescale_trop_only=.True.
+logical, parameter :: rescale_trop_only_for_dry_advection=.False.
 logical, parameter :: show_scaling=.False.
 
 public :: tracer_2d, tracer_2d_nested, tracer_2d_1L, offline_tracer_advection
@@ -846,8 +846,8 @@ subroutine tracer_2d_nested(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, np
 subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
                                     gridstruct, flagstruct, bd, domain, &
                                     ak, bk, ptop, npx, npy, npz,   &
-                                    nq, dt, pleadv)
-                                    ! GCHP: pass extra optional argument pleadv
+                                    nq, dt, pleadv, sphu1)
+                                    ! GCHP: pass extra optional argument pleadv, sphu1
                                     !nq, dt)
 
 
@@ -876,6 +876,7 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
       real, intent(IN   ) :: ptop
       ! GCHP: add optional argument pleadv
       real, optional, intent(OUT  ) ::pleadv(bd%is:bd%ie,bd%js:bd%je,npz+1)    ! DELP after adv_core
+      real, optional, intent(IN   ) :: sphu1(bd%is:bd%ie,bd%js:bd%je,npz)      ! specific humidity in next time step
 ! Local Arrays
       real ::   xL(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz)  ! X-Dir for MPP Updates
       real ::   yL(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)  ! Y-Dir for MPP Updates
@@ -901,6 +902,7 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
 
 ! Local indices
       integer     :: i,j,k,n,iq
+      integer     :: nq_scale
 
       real :: scalingFactor
 
@@ -971,6 +973,14 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
        end do
     end if
 
+    ! Total pressure advection: water vapor tracer needs special treatment
+    ! Only implemented for nq > 5 remapping for now
+    if (present(sphu1)) then
+      nq_scale = nq-1
+    else
+      nq_scale = nq
+    endif
+
 !------------------------------------------------------------------
 ! Re-Map constituents
 !------------------------------------------------------------------
@@ -985,89 +995,101 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
        end do
     end if
 
-      if( nq > 5 ) then
-          do iq=1,nq
-            kord_tracers(iq) = flagstruct%kord_tr
-          enddo
-          do j=js,je
-           ! pressures mapping from (dpA is new delp after tracer_2d)
-             pe1(:,1) = ptop
-             do k=2,npz+1
-               pe1(:,k) = pe1(:,k-1) + dpA(:,j,k-1)
-             enddo
-           ! pressures mapping to
-             pe2(:,1) = ptop
-             pe2(:,npz+1) = pe1(:,npz+1)
-             do k=2,npz
-                 pe2(:  ,k) = ak(k) + bk(k)*pe1(:,npz+1)
-             enddo
-             do k=1,npz
-                dp2(:,j,k) = pe2(:,k+1) - pe2(:,k)
-             enddo
-             call mapn_tracer(nq, npz, pe1, pe2, q3, dp2(:,j,:), kord_tracers, j,     &
-                              is, ie, isd, ied, jsd, jed, 0., flagstruct%fill)
-          enddo
-      elseif ( nq > 0 ) then
-       do iq=1,nq
-          do j=js,je
-           ! pressures mapping from (dpA is new delp after tracer_2d)
-             pe1(:,1) = ptop
-             do k=2,npz+1
-               pe1(:,k) = pe1(:,k-1) + dpA(:,j,k-1)
-             enddo
-           ! pressures mapping to
-             pe2(:,1) = ptop
-             pe2(:,npz+1) = pe1(:,npz+1)
-             do k=2,npz
-                 pe2(:  ,k) = ak(k) + bk(k)*pe1(:,npz+1)
-             enddo
-             do k=1,npz
-                dp2(:,j,k) = pe2(:,k+1) - pe2(:,k)
-             enddo
-             call map1_q2(npz, pe1, q3(isd,jsd,1,iq),      &
-                          npz, pe2, q1(:,j,:), dp2(:,j,:), &
-                          is, ie, 0, flagstruct%kord_tr, j,&
-                          isd, ied, jsd, jed, 0.) 
-             if (flagstruct%fill) call fillz(ie-is+1, npz, 1, q1(:,j,:), dp2(:,j,:))
-             q3(is:ie,j,1:npz,iq) = q1(:,j,:)
-          enddo
+    kord_tracers = flagstruct%kord_tr
+    do j=js,je
+     ! pressures mapping from (dpA is new delp after tracer_2d)
+       pe1(:,1) = ptop
+       do k=2,npz+1
+         pe1(:,k) = pe1(:,k-1) + dpA(:,j,k-1)
        enddo
-      end if
+     ! pressures mapping to
+       pe2(:,1) = ptop
+       pe2(:,npz+1) = pe1(:,npz+1)
+       do k=2,npz
+           pe2(:  ,k) = ak(k) + bk(k)*pe1(:,npz+1)
+       enddo
+       do k=1,npz
+          dp2(:,j,k) = pe2(:,k+1) - pe2(:,k)
+       enddo
 
-       ! Rescale tracers based on ple1 at destination timestep
-       !------------------------------------------------------
-       ! GCHP: rescale trop only
-       !do iq=1,nq
-       !   scalingFactor = calcScalingFactor(q3(is:ie,js:je,1:npz,iq), dp2, ple1, npx, npy, npz, gridstruct, bd)
-       !   ! Return tracers
-       !   !---------------
-       !   q(is:ie,js:je,1:npz,iq) = q3(is:ie,js:je,1:npz,iq) * scalingFactor
-       !enddo
-       if (rescale_trop_only) then
-          do iq=1,nq
-             scalingFactor = calcScalingFactorTrop(q3(is:ie,js:je,1:npz,iq), dp2, ple1,&
-                                                   npx, npy, npz, gridstruct, kStart, bd)
-             ! Return tracers
-             !---------------
-             q(is:ie,js:je,1:(kStart-1),iq) = q3(is:ie,js:je,1:(kStart-1),iq)
-             q(is:ie,js:je,kStart:npz,iq) = q3(is:ie,js:je,kStart:npz,iq) * scalingFactor
-             if (show_scaling.and.is_master()) then
-                write(*,'(a,I3,a,E16.5E4)') ' FV3 scaling error for tracer ', iq, ': ', &
-                    (scalingFactor - 1.0)
-             end if
+       ! do water vapor remapping first
+       ! remap dry mixing ratio for other species
+       if ( present(sphu1) ) then
+          call map1_q2(npz, pe1, q3(isd,jsd,1,nq),      &
+                    npz, pe2, q1(:,j,:), dp2(:,j,:), &
+                    is, ie, 0, flagstruct%kord_tr, j,&
+                    isd, ied, jsd, jed, 0.) 
+          if (flagstruct%fill) call fillz(ie-is+1, npz, 1, q1(:,j,:), dp2(:,j,:))
+
+          ! dry dp2 and dpA
+          dp2(:,j,:) = dp2(:,j,:) * (1.0-q1(:,j,:))
+          dpA(:,j,:) = dpA(:,j,:) * (1.0-q3(is:ie,j,:,nq))
+
+          ! dry mixing ratio relative to dry dpA
+          ! use pre-remapped water vapor to convert pre-remapped mixing ratio
+          do iq=1,nq_scale
+             q3(is:ie,j,:,iq) = q3(is:ie,j,:,iq) / (1.0-q3(is:ie,j,:,nq))
           enddo
-       else
-          do iq=1,nq
-             scalingFactor = calcScalingFactor(q3(is:ie,js:je,1:npz,iq), dp2, ple1, npx, npy, npz, gridstruct, bd)
-             ! Return tracers
-             !---------------
-             q(is:ie,js:je,1:npz,iq) = q3(is:ie,js:je,1:npz,iq) * scalingFactor
-             if (show_scaling.and.is_master()) then
-                write(*,'(a,I3,a,E16.5E4)') ' FV3 scaling error for tracer ', iq, ': ', &
-                    (scalingFactor - 1.0)
-             end if
+
+          ! fill remapped water vapor
+          q3(is:ie,j,:,nq) = q1(:,j,:)
+
+          ! reconstruct dry pe1 and pe2
+          pe1(:,1) = ptop
+          pe2(:,1) = ptop
+          do k=2,npz+1
+            pe1(:,k) = pe1(:,k-1) + dpA(:,j,k-1)
+            pe2(:,k) = pe2(:,k-1) + dp2(:,j,k-1)
           enddo
        endif
+
+       ! q3 will always be dry mixing ratio after remapping
+       call mapn_tracer(nq_scale, npz, pe1, pe2, q3(:,:,:,1:nq_scale), dp2(:,j,:), kord_tracers, j, &
+                        is, ie, isd, ied, jsd, jed, 0., flagstruct%fill)
+    enddo
+
+    if ( present(sphu1) ) then
+       do iq=1,nq_scale
+          q3(is:ie,js:je,:,iq) = q3(is:ie,js:je,:,iq) * (1.0-sphu1)
+       enddo
+    endif
+
+    ! Rescale tracers based on ple1 at destination timestep
+    !------------------------------------------------------
+    ! GCHP: rescale trop only
+    !do iq=1,nq
+    !   scalingFactor = calcScalingFactor(q3(is:ie,js:je,1:npz,iq), dp2, ple1, npx, npy, npz, gridstruct, bd)
+    !   ! Return tracers
+    !   !---------------
+    !   q(is:ie,js:je,1:npz,iq) = q3(is:ie,js:je,1:npz,iq) * scalingFactor
+    !enddo
+
+    ! rescale_trop_only not suitable for total pressure advection
+    if ( rescale_trop_only .and. .not. present(sphu1) ) then
+       do iq=1,nq_scale
+          scalingFactor = calcScalingFactorTrop(q3(is:ie,js:je,1:npz,iq), dp2, ple1,&
+                                                npx, npy, npz, gridstruct, kStart, bd)
+          ! Return tracers
+          !---------------
+          q(is:ie,js:je,1:(kStart-1),iq) = q3(is:ie,js:je,1:(kStart-1),iq)
+          q(is:ie,js:je,kStart:npz,iq) = q3(is:ie,js:je,kStart:npz,iq) * scalingFactor
+          if (show_scaling.and.is_master()) then
+             write(*,'(a,I3,a,E16.5E4)') ' FV3 scaling error for tracer ', iq, ': ', &
+                 (scalingFactor - 1.0)
+          end if
+       enddo
+    else
+       do iq=1,nq_scale
+          scalingFactor = calcScalingFactor(q3(is:ie,js:je,1:npz,iq), dp2, ple1, npx, npy, npz, gridstruct, bd)
+          ! Return tracers
+          !---------------
+          q(is:ie,js:je,1:npz,iq) = q3(is:ie,js:je,1:npz,iq) * scalingFactor
+          if (show_scaling.and.is_master()) then
+             write(*,'(a,I3,a,E16.5E4)') ' FV3 scaling error for tracer ', iq, ': ', &
+                 (scalingFactor - 1.0)
+          end if
+       enddo
+    endif
 
 end subroutine offline_tracer_advection
 
@@ -1178,7 +1200,7 @@ end subroutine offline_tracer_advection
             !#################################################################
             ! This line was added to ensure strong reproducibility of the code
             !#################################################################
-            scaling = REAL(scaling, KIND=kind(1.00))
+            ! scaling = REAL(scaling, KIND=kind(1.00))
          else
             scaling = 1.d0
          end if
