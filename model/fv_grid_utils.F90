@@ -227,7 +227,9 @@
       ne_corner                     => Atm%gridstruct%ne_corner
       nw_corner                     => Atm%gridstruct%nw_corner
 
-      if ( Atm%flagstruct%do_schmidt .and. abs(Atm%flagstruct%stretch_fac-1.) > 1.E-5 ) then
+      ! A regional grid read from file has no cubed-sphere symmetry (see init_grid)
+      if ( (Atm%flagstruct%do_schmidt .and. abs(Atm%flagstruct%stretch_fac-1.) > 1.E-5) &
+           .or. Atm%flagstruct%regional ) then
            Atm%gridstruct%stretched_grid = .true.
            symm_grid = .false.
       else
@@ -273,7 +275,7 @@
       ne_corner = .false.
       nw_corner = .false.
 
-      if (grid_type < 3 .and. .not. Atm%neststruct%nested) then
+      if (grid_type < 3 .and. .not. Atm%gridstruct%bounded_domain) then
          if (       is==1 .and.  js==1 )      sw_corner = .true.
          if ( (ie+1)==npx .and.  js==1 )      se_corner = .true.
          if ( (ie+1)==npx .and. (je+1)==npy ) ne_corner = .true.
@@ -287,7 +289,7 @@
   endif
 
   if (grid_type < 3) then
-     if ( .not. Atm%neststruct%nested ) then
+     if ( .not. Atm%gridstruct%bounded_domain ) then
      call fill_corners(grid(:,:,1), npx, npy, FILL=XDir, BGRID=.true.)
      call fill_corners(grid(:,:,2), npx, npy, FILL=XDir, BGRID=.true.)
      end if
@@ -302,7 +304,7 @@
      call get_center_vect( npx, npy, grid3, ec1, ec2, Atm%bd )
 
 ! Fill arbitrary values in the non-existing corner regions:
-     if (.not. Atm%neststruct%nested) then
+     if (.not. Atm%gridstruct%bounded_domain) then
      do k=1,3
         call fill_ghost(ec1(k,:,:), npx, npy, big_number, Atm%bd)
         call fill_ghost(ec2(k,:,:), npx, npy, big_number, Atm%bd)
@@ -313,14 +315,14 @@
      do j=jsd,jed
         do i=isd+1,ied
         if ( ( (i<1   .and. j<1  ) .or. (i>npx .and. j<1  ) .or.  &
-             (i>npx .and. j>(npy-1)) .or. (i<1   .and. j>(npy-1)) )  .and. .not. Atm%neststruct%nested) then
+             (i>npx .and. j>(npy-1)) .or. (i<1   .and. j>(npy-1)) )  .and. .not. Atm%gridstruct%bounded_domain) then
              ew(1:3,i,j,1:2) = 0.
         else
            call mid_pt_cart( grid(i,j,1:2), grid(i,j+1,1:2), pp)
-           if (i==1 .and. .not. Atm%neststruct%nested) then
+           if (i==1 .and. .not. Atm%gridstruct%bounded_domain) then
               call latlon2xyz( agrid(i,j,1:2), p1)
               call vect_cross(p2, pp, p1)
-           elseif(i==npx .and. .not. Atm%neststruct%nested) then
+           elseif(i==npx .and. .not. Atm%gridstruct%bounded_domain) then
               call latlon2xyz( agrid(i-1,j,1:2), p1)
               call vect_cross(p2, p1, pp)
            else
@@ -341,14 +343,14 @@
      do j=jsd+1,jed
         do i=isd,ied
         if ( ( (i<1   .and. j<1  ) .or. (i>(npx-1) .and. j<1  ) .or.  &
-               (i>(npx-1) .and. j>npy) .or. (i<1   .and. j>npy) ) .and. .not. Atm%neststruct%nested) then
+               (i>(npx-1) .and. j>npy) .or. (i<1   .and. j>npy) ) .and. .not. Atm%gridstruct%bounded_domain) then
              es(1:3,i,j,1:2) = 0.
         else
            call mid_pt_cart(grid(i,j,1:2), grid(i+1,j,1:2), pp)
-           if (j==1 .and. .not. Atm%neststruct%nested) then
+           if (j==1 .and. .not. Atm%gridstruct%bounded_domain) then
               call latlon2xyz( agrid(i,j,1:2), p1)
               call vect_cross(p2, pp, p1)
-           elseif (j==npy .and. .not. Atm%neststruct%nested) then
+           elseif (j==npy .and. .not. Atm%gridstruct%bounded_domain) then
               call latlon2xyz( agrid(i,j-1,1:2), p1)
               call vect_cross(p2, p1, pp)
            else 
@@ -416,7 +418,7 @@
 ! -------------------------------
 ! For transport operation
 ! -------------------------------
-      if (.not. Atm%neststruct%nested) then
+      if (.not. Atm%gridstruct%bounded_domain) then
       if ( sw_corner ) then
            do i=-2,0
               sin_sg(0,i,3) = sin_sg(i,1,2) 
@@ -514,9 +516,9 @@
         do j=js,je+1
            do i=is,ie+1
 ! unit vect in X-dir: ee1
-              if (i==1 .and. .not. Atm%neststruct%nested) then
+              if (i==1 .and. .not. Atm%gridstruct%bounded_domain) then
                   call vect_cross(pp, grid3(1,i,  j), grid3(1,i+1,j))
-              elseif(i==npx .and. .not. Atm%neststruct%nested) then
+              elseif(i==npx .and. .not. Atm%gridstruct%bounded_domain) then
                   call vect_cross(pp, grid3(1,i-1,j), grid3(1,i,  j))
               else
                   call vect_cross(pp, grid3(1,i-1,j), grid3(1,i+1,j))
@@ -525,9 +527,9 @@
               call normalize_vect( ee1(1:3,i,j) )
 
 ! unit vect in Y-dir: ee2
-              if (j==1 .and. .not. Atm%neststruct%nested) then
+              if (j==1 .and. .not. Atm%gridstruct%bounded_domain) then
                   call vect_cross(pp, grid3(1:3,i,j  ), grid3(1:3,i,j+1))
-              elseif(j==npy .and. .not. Atm%neststruct%nested) then
+              elseif(j==npy .and. .not. Atm%gridstruct%bounded_domain) then
                   call vect_cross(pp, grid3(1:3,i,j-1), grid3(1:3,i,j  ))
               else
                   call vect_cross(pp, grid3(1:3,i,j-1), grid3(1:3,i,j+1))
@@ -577,7 +579,7 @@
          enddo
       enddo
 ! Force the model to fail if incorrect corner values are to be used:
-      if (.not. Atm%neststruct%nested) then
+      if (.not. Atm%gridstruct%bounded_domain) then
          call fill_ghost(cosa_s, npx, npy,  big_number, Atm%bd)
       end if
 !------------------------------------
@@ -585,8 +587,8 @@
 !------------------------------------
       do j=js,je+1
          do i=is,ie+1
-            if ( i==npx .and. j==npy .and. .not. Atm%neststruct%nested) then
-            else if ( ( i==1 .or. i==npx .or. j==1 .or. j==npy ) .and. .not. Atm%neststruct%nested ) then
+            if ( i==npx .and. j==npy .and. .not. Atm%gridstruct%bounded_domain) then
+            else if ( ( i==1 .or. i==npx .or. j==1 .or. j==npy ) .and. .not. Atm%gridstruct%bounded_domain ) then
                  rsina(i,j) = big_number
             else
 !                rsina(i,j) = 1. / sina(i,j)**2
@@ -597,7 +599,7 @@
 
       do j=jsd,jed
          do i=is,ie+1
-            if ( (i==1 .or. i==npx)  .and. .not. Atm%neststruct%nested ) then
+            if ( (i==1 .or. i==npx)  .and. .not. Atm%gridstruct%bounded_domain ) then
 !                rsin_u(i,j) = 1. / sina_u(i,j)
                  rsin_u(i,j) = 1. / sign(max(tiny_number,abs(sina_u(i,j))), sina_u(i,j))
             endif
@@ -606,7 +608,7 @@
 
       do j=js,je+1
          do i=isd,ied
-            if ( (j==1 .or. j==npy) .and. .not. Atm%neststruct%nested ) then
+            if ( (j==1 .or. j==npy) .and. .not. Atm%gridstruct%bounded_domain ) then
 !                rsin_v(i,j) = 1. / sina_v(i,j)
                  rsin_v(i,j) = 1. / sign(max(tiny_number,abs(sina_v(i,j))), sina_v(i,j))
             endif
@@ -617,7 +619,7 @@
       !values along the outward-facing edge of a tile in the corners, which is incorrect. 
       !What we will do is call fill_ghost and then fill in the appropriate values
 
-      if (.not. Atm%neststruct%nested) then
+      if (.not. Atm%gridstruct%bounded_domain) then
        do k=1,9
         call fill_ghost(sin_sg(:,:,k), npx, npy, tiny_number, Atm%bd)  ! this will cause NAN if used
         call fill_ghost(cos_sg(:,:,k), npx, npy, big_number, Atm%bd)
@@ -706,7 +708,7 @@
 ! Make normal vect at face edges after consines are computed:
 !-------------------------------------------------------------
 ! for old d2a2c_vect routines
-      if (.not. Atm%neststruct%nested) then
+      if (.not. Atm%gridstruct%bounded_domain) then
          do j=js-1,je+1
             if ( is==1 ) then
                i=1
@@ -757,7 +759,7 @@
   endif
  
   do j=jsd,jed+1
-     if ((j==1 .OR. j==npy) .and. .not. Atm%neststruct%nested) then
+     if ((j==1 .OR. j==npy) .and. .not. Atm%gridstruct%bounded_domain) then
         do i=isd,ied
            divg_u(i,j) = 0.5*(sin_sg(i,j,2)+sin_sg(i,j-1,4))*dyc(i,j)/dx(i,j)
            del6_u(i,j) = 0.5*(sin_sg(i,j,2)+sin_sg(i,j-1,4))*dx(i,j)/dyc(i,j)
@@ -774,11 +776,11 @@
         divg_v(i,j) = sina_u(i,j)*dxc(i,j)/dy(i,j)
         del6_v(i,j) = sina_u(i,j)*dy(i,j)/dxc(i,j)
      enddo
-     if (is == 1 .and. .not. Atm%neststruct%nested) then
+     if (is == 1 .and. .not. Atm%gridstruct%bounded_domain) then
          divg_v(is,j) = 0.5*(sin_sg(1,j,1)+sin_sg(0,j,3))*dxc(is,j)/dy(is,j)
          del6_v(is,j) = 0.5*(sin_sg(1,j,1)+sin_sg(0,j,3))*dy(is,j)/dxc(is,j)
      endif
-     if (ie+1 == npx .and. .not. Atm%neststruct%nested) then
+     if (ie+1 == npx .and. .not. Atm%gridstruct%bounded_domain) then
          divg_v(ie+1,j) = 0.5*(sin_sg(npx,j,1)+sin_sg(npx-1,j,3))*dxc(ie+1,j)/dy(ie+1,j)
          del6_v(ie+1,j) = 0.5*(sin_sg(npx,j,1)+sin_sg(npx-1,j,3))*dy(ie+1,j)/dxc(ie+1,j)
      endif
@@ -798,7 +800,7 @@
 ! Initialization for interpolation at face edges
 !------------------------------------------------
 ! A->B scalar:
-     if (grid_type < 3 .and. .not. Atm%neststruct%nested) then
+     if (grid_type < 3 .and. .not. Atm%gridstruct%bounded_domain) then
         call mpp_update_domains(divg_v, divg_u, Atm%domain, flags=SCALAR_PAIR,      &
                                 gridtype=CGRID_NE_PARAM, complete=.true.)
         call mpp_update_domains(del6_v, del6_u, Atm%domain, flags=SCALAR_PAIR,      &
@@ -807,8 +809,8 @@
              Atm%gridstruct%edge_e, non_ortho, grid, agrid, npx, npy, Atm%bd)
         call efactor_a2c_v(Atm%gridstruct%edge_vect_s, Atm%gridstruct%edge_vect_n, &
              Atm%gridstruct%edge_vect_w, Atm%gridstruct%edge_vect_e, &
-             non_ortho, grid, agrid, npx, npy, Atm%neststruct%nested, Atm%bd)
-!       call extend_cube_s(non_ortho, grid, agrid, npx, npy, .false., Atm%neststruct%nested)
+             non_ortho, grid, agrid, npx, npy, Atm%gridstruct%bounded_domain, Atm%bd)
+!       call extend_cube_s(non_ortho, grid, agrid, npx, npy, .false., Atm%gridstruct%bounded_domain)
 !       call van2d_init(grid, agrid, npx, npy)
      else
 

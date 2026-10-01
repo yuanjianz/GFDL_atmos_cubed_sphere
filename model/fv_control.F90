@@ -319,6 +319,7 @@ module fv_control_mod
   real(kind=R_GRID), pointer :: deglat
 
   logical, pointer :: nested, twowaynest
+  logical, pointer :: regional
   integer, pointer :: parent_tile, refinement, nestbctype, nestupdate, nsponge, ioffset, joffset
   real, pointer :: s_weight, update_blend
 
@@ -449,6 +450,8 @@ module fv_control_mod
 
             !!CLEANUP: Convenience pointers
             Atm(n)%gridstruct%nested    => Atm(n)%neststruct%nested
+            Atm(n)%gridstruct%regional  => Atm(n)%flagstruct%regional
+            Atm(n)%gridstruct%bounded_domain = Atm(n)%flagstruct%regional .or. Atm(n)%neststruct%nested
             Atm(n)%gridstruct%grid_type => Atm(n)%flagstruct%grid_type
             Atm(n)%flagstruct%grid_number => Atm(n)%grid_number
 
@@ -673,7 +676,7 @@ module fv_control_mod
                          nested, twowaynest, parent_grid_num, parent_tile, nudge_qv, &
                          refinement, nestbctype, nestupdate, nsponge, s_weight, &
                          ioffset, joffset, check_negative, nudge_ic, halo_update_type, gfs_phil, agrid_vel_rst,     &
-                         do_uni_zfull, adj_mass_vmr
+                         do_uni_zfull, adj_mass_vmr, regional
 
    namelist /test_case_nml/test_case, bubble_do, alpha, nsolitons, soliton_Umax, soliton_size
 
@@ -760,7 +763,14 @@ module fv_control_mod
          nf_omega = 0
       endif
 
-      if (.not. nested) Atm(n)%neststruct%npx_global = npx
+      if (regional) then
+         if (nested) call mpp_error(FATAL, 'fv_control: regional and nested cannot both be true.')
+         if (ntiles /= 1) call mpp_error(FATAL, 'fv_control: a regional domain must have ntiles = 1.')
+         if (grid_type < 0 .or. grid_type > 2) &
+              call mpp_error(FATAL, 'fv_control: a regional domain requires grid_type = 0, 1, or 2.')
+      endif
+
+      if (.not. (nested .or. regional)) Atm(n)%neststruct%npx_global = npx
 
       ! Define n_split if not in namelist
       if (ntiles==6) then
@@ -1302,6 +1312,7 @@ module fv_control_mod
      deglat                        => Atm%flagstruct%deglat
 
      nested                        => Atm%neststruct%nested
+     regional                      => Atm%flagstruct%regional
      twowaynest                    => Atm%neststruct%twowaynest
      parent_tile                   => Atm%neststruct%parent_tile
      refinement                    => Atm%neststruct%refinement

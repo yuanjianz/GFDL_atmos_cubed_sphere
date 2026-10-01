@@ -242,6 +242,9 @@ module fv_arrays_mod
                                    !< supported and will likely not run. The default value is 0.
 
      logical, pointer :: nested   !< Whether this is a nested grid. .false. by default.
+     logical, pointer :: regional !< Whether this is a stand-alone limited-area (regional) grid.
+     logical :: bounded_domain = .false. !< Regional or nested: a single tile with outer
+                                         !< boundaries, so no cubed-sphere edge/corner handling.
 
 
   end type fv_grid_type
@@ -1021,7 +1024,11 @@ module fv_arrays_mod
    !f1p
    logical  :: adj_mass_vmr = .false. !TER: This is to reproduce answers for verona patch.  This default can be changed
                                      !     to .true. in the next city release if desired
-  
+
+   ! options related to regional mode
+   logical :: regional = .false.  !< Stand-alone limited-area (regional) domain. The grid is read
+                                  !< from grid_file, which must include the halo (FV3 supergrid).
+
   !integer, pointer :: test_case
   !real,    pointer :: alpha
 

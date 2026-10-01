@@ -923,6 +923,9 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
 
 ! Time-step
 ! Fill CX/CY C-Grid boundaries and update ghost regions
+  if (gridstruct%bounded_domain) then
+    call fill_faces_bounded(cx, cy, xL, yL)
+  else
     xL(is:ie,js:je,:) = cx(:,:,:)
     yL(is:ie,js:je,:) = cy(:,:,:)
     call mpp_get_boundary(xL, yL, domain, &
@@ -932,10 +935,14 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
     xL(ie+1,js:je,:) = ebuffer
     yL(is:ie,je+1,:) = nbuffer
     call mpp_update_domains( xL, yL, domain, gridtype=CGRID_NE, complete=.true.)
+  endif
     cxL(is:ie+1,jsd:jed,:) = xL(is:ie+1,jsd:jed,:)
     cyL(isd:ied,js:je+1,:) = yL(isd:ied,js:je+1,:)
 
 ! Fill MFX/MFY C-Grid boundaries
+  if (gridstruct%bounded_domain) then
+    call fill_faces_bounded(mfx, mfy, xL, yL)
+  else
     xL(is:ie,js:je,:) = mfx(:,:,:)
     yL(is:ie,js:je,:) = mfy(:,:,:)
     call mpp_get_boundary(xL, yL, domain, &
@@ -944,12 +951,19 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
                           gridtype=CGRID_NE )
     xL(ie+1,js:je,:) = ebuffer
     yL(is:ie,je+1,:) = nbuffer
+  endif
     mfxL(is:ie+1,js:je,:) = xL(is:ie+1,js:je,:)
     mfyL(is:ie,js:je+1,:) = yL(is:ie,js:je+1,:)
 
 ! Fill local tracers and pressure thickness
     dpL(bd%is:bd%ie,bd%js:bd%je,:) = ple0(:,:,2:npz+1) - ple0(:,:,1:npz)
     q3(is:ie,js:je,:,:) = q(is:ie,js:je,:,:)
+    if (gridstruct%bounded_domain) then
+       ! The outer halo is never touched by the halo updates in tracer_2d, so the
+       ! values set here are used for every tracer sub-step.
+       call mpp_update_domains(q3, domain)
+       call fill_outer_halo_tracers(q3)
+    endif
     call start_group_halo_update(i_pack, q3, domain)
 
     if ( flagstruct%z_tracer ) then
@@ -1068,6 +1082,115 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
              end if
           enddo
        endif
+
+contains
+
+    ! GCHP regional: on a bounded (regional) domain, the halo cells outside the
+    ! domain and the east/north boundary faces have no neighbor PE to fill them.
+    ! Give them the value of the nearest cell or face inside the domain
+    ! (copy-nearest, i.e. zero gradient). With a buffer zone of lateral boundary
+    ! conditions inside the domain, errors from this fill stay in the buffer.
+
+    !> C-grid x/y faces on a bounded domain. mpp_get_boundary does not exchange
+    !! the shared east/north faces between PEs of a single tile without contacts,
+    !! so instead: each cell holds its west (x) or south (y) face, and a
+    !! cell-centered halo update brings in the neighbors' faces, including the
+    !! faces at ie+1 and je+1 (no vector rotation is needed on a single tile).
+    !! Then fill the faces outside the domain.
+    subroutine fill_faces_bounded(xin, yin, xa, ya)
+      real, intent(IN)    :: xin(bd%is:bd%ie,bd%js:bd%je,npz)
+      real, intent(IN)    :: yin(bd%is:bd%ie,bd%js:bd%je,npz)
+      real, intent(INOUT) :: xa(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz)
+      real, intent(INOUT) :: ya(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
+      real :: xc(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+      real :: yc(bd%isd:bd%ied,bd%jsd:bd%jed,npz)
+
+      xc = 0.
+      yc = 0.
+      xc(is:ie,js:je,:) = xin
+      yc(is:ie,js:je,:) = yin
+      call mpp_update_domains(xc, domain, complete=.false.)
+      call mpp_update_domains(yc, domain, complete=.true.)
+      xa(isd:ied,jsd:jed,:) = xc
+      ya(isd:ied,jsd:jed,:) = yc
+      xa(ied+1,:,:) = 0.
+      ya(:,jed+1,:) = 0.
+      call fill_boundary_faces(xa, ya)
+      call fill_outer_halo_cgrid(xa, ya)
+
+    end subroutine fill_faces_bounded
+
+    !> East/north boundary faces: copy the nearest interior face. Covers the
+    !! halo rows/columns too, so run it after the halo update.
+    subroutine fill_boundary_faces(xa, ya)
+      real, intent(INOUT) :: xa(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz)
+      real, intent(INOUT) :: ya(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
+
+      if (ie+1 == npx) xa(npx,jsd:jed,:) = xa(npx-1,jsd:jed,:)
+      if (je+1 == npy) ya(isd:ied,npy,:) = ya(isd:ied,npy-1,:)
+
+    end subroutine fill_boundary_faces
+
+    !> C-grid x-faces in the halo rows and y-faces in the halo columns outside
+    !! the domain: copy the nearest row/column of faces inside the domain.
+    subroutine fill_outer_halo_cgrid(xa, ya)
+      real, intent(INOUT) :: xa(bd%isd:bd%ied+1,bd%jsd:bd%jed  ,npz)
+      real, intent(INOUT) :: ya(bd%isd:bd%ied  ,bd%jsd:bd%jed+1,npz)
+      integer :: i, j
+
+      if (js == 1) then
+         do j=jsd,0
+            xa(is:ie+1,j,:) = xa(is:ie+1,1,:)
+         enddo
+      endif
+      if (je+1 == npy) then
+         do j=npy,jed
+            xa(is:ie+1,j,:) = xa(is:ie+1,npy-1,:)
+         enddo
+      endif
+      if (is == 1) then
+         do i=isd,0
+            ya(i,js:je+1,:) = ya(1,js:je+1,:)
+         enddo
+      endif
+      if (ie+1 == npx) then
+         do i=npx,ied
+            ya(i,js:je+1,:) = ya(npx-1,js:je+1,:)
+         enddo
+      endif
+
+    end subroutine fill_outer_halo_cgrid
+
+    !> Tracer halo cells outside the domain: copy the nearest cell inside the
+    !! domain. Requires a completed halo update, so that the parts of the edge
+    !! column/row owned by neighboring PEs are available. The x pass runs first;
+    !! the y pass then overwrites the halo rows, which fills the domain corners.
+    subroutine fill_outer_halo_tracers(qa)
+      real, intent(INOUT) :: qa(bd%isd:bd%ied,bd%jsd:bd%jed,npz,nq)
+      integer :: i, j
+
+      if (is == 1) then
+         do i=isd,0
+            qa(i,:,:,:) = qa(1,:,:,:)
+         enddo
+      endif
+      if (ie+1 == npx) then
+         do i=npx,ied
+            qa(i,:,:,:) = qa(npx-1,:,:,:)
+         enddo
+      endif
+      if (js == 1) then
+         do j=jsd,0
+            qa(:,j,:,:) = qa(:,1,:,:)
+         enddo
+      endif
+      if (je+1 == npy) then
+         do j=npy,jed
+            qa(:,j,:,:) = qa(:,npy-1,:,:)
+         enddo
+      endif
+
+    end subroutine fill_outer_halo_tracers
 
 end subroutine offline_tracer_advection
 

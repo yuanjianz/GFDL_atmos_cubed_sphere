@@ -148,7 +148,7 @@ module fv_grid_tools_mod
                                CORNER, CENTER, XUPDATE
   use fms_mod,           only: get_mosaic_tile_grid
   use fms_io_mod,        only: file_exist, field_exist, read_data, &
-                               get_global_att_value, get_var_att_value
+                               get_global_att_value, get_var_att_value, field_size
   use mosaic_mod,       only : get_mosaic_ntiles
 
   implicit none
@@ -643,6 +643,9 @@ contains
     cubed_sphere = .false.
 
     if ( Atm%flagstruct%do_schmidt .and. abs(atm%flagstruct%stretch_fac-1.) > 1.E-5 ) stretched_grid = .true.
+    ! A regional grid read from file has no cubed-sphere symmetry, so compute all
+    ! metrics directly from the cell corners, as for a stretched grid.
+    if ( Atm%flagstruct%regional ) stretched_grid = .true.
 
 
     sw_corner = .false.
@@ -670,6 +673,8 @@ contains
           
           if (Atm%neststruct%nested) then
              call setup_aligned_nest(Atm)
+          else if (Atm%flagstruct%regional) then
+             call setup_regional_grid(Atm, grid_file)
           else
           if(trim(grid_file) == 'INPUT/grid_spec.nc') then  
              call read_grid(Atm, grid_file, ndims, nregions, ng)
@@ -862,13 +867,13 @@ contains
            call sorted_intb(isd, ied, jsd, jed, is, ie, js, je, npx, npy, &
                             cubed_sphere, agrid, iintb, jintb)
 
-       call grid_area( npx, npy, ndims, nregions, Atm%neststruct%nested, Atm%gridstruct, Atm%domain, Atm%bd )
+       call grid_area( npx, npy, ndims, nregions, Atm%gridstruct%bounded_domain, Atm%gridstruct, Atm%domain, Atm%bd )
 !      stretched_grid = .false.
 
 !----------------------------------
 ! Compute area_c, rarea_c, dxc, dyc
 !----------------------------------
-  if ( .not. stretched_grid .and. .not. Atm%neststruct%nested) then
+  if ( .not. stretched_grid .and. .not. Atm%gridstruct%bounded_domain) then
 ! For symmetrical grids:
        if ( is==1 ) then
           i = 1
@@ -968,13 +973,13 @@ contains
 
        call mpp_update_domains( dxc, dyc, Atm%domain, flags=SCALAR_PAIR,   &
                                 gridtype=CGRID_NE_PARAM, complete=.true.)
-       if (cubed_sphere  .and. .not. Atm%neststruct%nested) call fill_corners(dxc, dyc, npx, npy, CGRID=.true.)
+       if (cubed_sphere  .and. .not. Atm%gridstruct%bounded_domain) call fill_corners(dxc, dyc, npx, npy, CGRID=.true.)
 
        call mpp_update_domains( area,   Atm%domain, complete=.true. )
 
 
        !Handling outermost ends for area_c
-       if (Atm%neststruct%nested) then
+       if (Atm%gridstruct%bounded_domain) then
           if (is == 1) then
              do j=jsd,jed
                 area_c(isd,j) = area_c(isd+1,j)
@@ -1004,7 +1009,7 @@ contains
        call mpp_update_domains( area_c, Atm%domain, position=CORNER, complete=.true.)
 
        ! Handle corner Area ghosting
-       if (cubed_sphere .and. .not. Atm%neststruct%nested) then
+       if (cubed_sphere .and. .not. Atm%gridstruct%bounded_domain) then
           call fill_ghost(area, npx, npy, -big_number, Atm%bd)  ! fill in garbage values
           call fill_corners(area_c, npx, npy, FILL=XDir, BGRID=.true.)
        endif
@@ -1246,6 +1251,117 @@ contains
        e2(3,:,:) = 0.
 
     end subroutine setup_cartesian
+
+    !>@brief The subroutine 'setup_regional_grid' reads the cell corners of a
+    !! regional grid, including its halo, from an FV3 supergrid file and computes
+    !! dx, dy, agrid, dxa, and dya over the whole data domain.
+    !>@details The file holds 'x' (longitude) and 'y' (latitude) on the supergrid,
+    !! which has 2*(npx-1+2*nhalo)+1 by 2*(npy-1+2*nhalo)+1 points; the width of the
+    !! halo ring, nhalo, is inferred from the dimensions and must be at least ng.
+    !! Cell corner (i,j) is supergrid point (2*(i-1+nhalo)+1, 2*(j-1+nhalo)+1).
+    !! Each PE reads its own data domain, so no halo exchange is needed.
+    subroutine setup_regional_grid(Atm, grid_file)
+
+      type(fv_atmos_type), intent(INOUT), target :: Atm
+      character(len=*),    intent(IN)            :: grid_file
+
+      real, allocatable, dimension(:,:) :: tmpx, tmpy
+      real(kind=R_GRID) :: pm1(2), pm2(2), fac
+      character(len=128) :: units
+      integer :: siz(4), nhalo, start(4), nread(4)
+      integer :: isc2, iec2, jsc2, jec2, i, j, ii, jj
+      integer :: is,  ie,  js,  je
+      integer :: isd, ied, jsd, jed
+
+      is  = Atm%bd%is
+      ie  = Atm%bd%ie
+      js  = Atm%bd%js
+      je  = Atm%bd%je
+      isd = Atm%bd%isd
+      ied = Atm%bd%ied
+      jsd = Atm%bd%jsd
+      jed = Atm%bd%jed
+
+      if (.not. file_exist(grid_file)) call mpp_error(FATAL, &
+           'fv_grid_tools(setup_regional_grid): file '//trim(grid_file)//' does not exist')
+
+      call field_size(grid_file, 'x', siz, no_domain=.true.)
+      nhalo = ((siz(1)-1)/2 - (npx-1)) / 2
+      if ( siz(1) /= 2*(npx-1+2*nhalo)+1 .or. siz(2) /= 2*(npy-1+2*nhalo)+1 ) then
+         if (is_master()) print*, 'supergrid size: ', siz(1:2), ' npx, npy: ', npx, npy
+         call mpp_error(FATAL, 'fv_grid_tools(setup_regional_grid): supergrid size in '// &
+              trim(grid_file)//' does not match npx, npy with a uniform halo ring')
+      endif
+      if ( nhalo < ng ) call mpp_error(FATAL, &
+           'fv_grid_tools(setup_regional_grid): the grid file halo is narrower than the FV3 halo')
+
+      units = ''
+      call get_var_att_value(grid_file, 'x', 'units', units)
+      if ( units(1:6) == 'degree' ) then
+         fac = pi/180.
+      else if ( units(1:6) == 'radian' ) then
+         fac = 1.
+      else
+         call mpp_error(FATAL, 'fv_grid_tools(setup_regional_grid): units of x must start with degree or radian')
+      endif
+
+      !--- read the supergrid points covering the data domain (compute domain + halo)
+      isc2 = 2*(isd-1+nhalo)+1; iec2 = 2*(ied+nhalo)+1
+      jsc2 = 2*(jsd-1+nhalo)+1; jec2 = 2*(jed+nhalo)+1
+      allocate(tmpx(isc2:iec2, jsc2:jec2))
+      allocate(tmpy(isc2:iec2, jsc2:jec2))
+      start = 1; nread = 1
+      start(1) = isc2; nread(1) = iec2 - isc2 + 1
+      start(2) = jsc2; nread(2) = jec2 - jsc2 + 1
+      call read_data(grid_file, 'x', tmpx, start, nread, no_domain=.TRUE.)
+      call read_data(grid_file, 'y', tmpy, start, nread, no_domain=.TRUE.)
+
+      !--- cell corners
+      do j=jsd,jed+1
+         jj = 2*(j-1+nhalo)+1
+         do i=isd,ied+1
+            ii = 2*(i-1+nhalo)+1
+            grid(i,j,1) = tmpx(ii,jj)*fac
+            grid(i,j,2) = tmpy(ii,jj)*fac
+            if ( grid(i,j,1) < 0. ) grid(i,j,1) = grid(i,j,1) + 2.*pi
+         enddo
+      enddo
+      deallocate(tmpx, tmpy)
+
+      !--- cell edge lengths
+      do j=jsd,jed+1
+         do i=isd,ied
+            dx(i,j) = great_circle_dist(grid(i,j,1:2), grid(i+1,j,1:2), radius)
+         enddo
+      enddo
+      do j=jsd,jed
+         do i=isd,ied+1
+            dy(i,j) = great_circle_dist(grid(i,j,1:2), grid(i,j+1,1:2), radius)
+         enddo
+      enddo
+
+      !--- cell centers and center-to-center distances across each cell
+      agrid(:,:,:) = -1.e25
+      do j=jsd,jed
+         do i=isd,ied
+            call cell_center2(grid(i,j,  1:2), grid(i+1,j,  1:2),   &
+                              grid(i,j+1,1:2), grid(i+1,j+1,1:2),   &
+                              agrid(i,j,1:2) )
+            call mid_pt_sphere(grid(i,  j,1:2), grid(i,  j+1,1:2), pm1)
+            call mid_pt_sphere(grid(i+1,j,1:2), grid(i+1,j+1,1:2), pm2)
+            dxa(i,j) = great_circle_dist( pm2, pm1, radius )
+            call mid_pt_sphere(grid(i,j  ,1:2), grid(i+1,j  ,1:2), pm1)
+            call mid_pt_sphere(grid(i,j+1,1:2), grid(i+1,j+1,1:2), pm2)
+            dya(i,j) = great_circle_dist( pm2, pm1, radius )
+         enddo
+      enddo
+
+      if (is_master()) then
+         write(*,*) 'REGIONAL GRID read from ', trim(grid_file), ' with a halo of ', nhalo, ' cells'
+         write(*,'(A, 2F10.4)') ' SW CORNER (lon, lat): ', grid(1,1,1)*todeg, grid(1,1,2)*todeg
+      endif
+
+    end subroutine setup_regional_grid
 
     subroutine setup_aligned_nest(Atm)
 

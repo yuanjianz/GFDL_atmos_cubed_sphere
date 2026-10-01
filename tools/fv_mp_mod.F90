@@ -142,6 +142,7 @@
       public fill_corners, XDir, YDir
       public switch_current_domain, switch_current_Atm, broadcast_domains
       public is_master, setup_master
+      public set_host_extents
       !The following variables are declared public by this module for convenience;
       !they will need to be switched when domains are switched
 !!! CLEANUP: ng is a PARAMETER and is OK to be shared by a use statement
@@ -246,7 +247,25 @@
 
       integer :: halo_update_type = 1
 
+      !> Optional per-PE cell counts along x and y of a single-tile domain, set by
+      !! the host model (e.g. MAPL) before domain_decomp so that FV3's decomposition
+      !! matches the host's exactly. If unset, FMS computes the extents itself.
+      integer, allocatable, save :: host_xextent(:), host_yextent(:)
+
 contains
+
+!>@brief The subroutine 'set_host_extents' sets the per-PE cell counts used by
+!! domain_decomp for a single-tile (regional) domain.
+        subroutine set_host_extents(xextent, yextent)
+          integer, intent(in) :: xextent(:), yextent(:)
+
+          if (allocated(host_xextent)) deallocate(host_xextent)
+          if (allocated(host_yextent)) deallocate(host_yextent)
+          allocate(host_xextent(size(xextent)), host_yextent(size(yextent)))
+          host_xextent = xextent
+          host_yextent = yextent
+
+        end subroutine set_host_extents
 
         subroutine mp_assign_gid
 
@@ -359,6 +378,7 @@ contains
          logical :: is_symmetry 
          logical :: debug=.false.
          integer, allocatable :: tile_id(:)
+         integer, allocatable :: xextent(:,:), yextent(:,:)
 
          integer i
          integer :: npes_x, npes_y 
@@ -638,6 +658,29 @@ contains
                   tile_id(n) = n
                enddo
             endif
+            if (allocated(host_xextent)) then
+               !--- Use the host model's decomposition (single tile only)
+               if (nregions /= 1) call mpp_error(FATAL, &
+                    'domain_decomp: host extents are only supported for a single-tile domain')
+               if (size(host_xextent) /= layout(1) .or. size(host_yextent) /= layout(2)) &
+                    call mpp_error(FATAL, 'domain_decomp: host extents do not match the layout')
+               if (sum(host_xextent) /= npx-1 .or. sum(host_yextent) /= npy-1) &
+                    call mpp_error(FATAL, 'domain_decomp: host extents do not add up to npx-1, npy-1')
+               allocate(xextent(layout(1),1), yextent(layout(2),1))
+               xextent(:,1) = host_xextent
+               yextent(:,1) = host_yextent
+               call mpp_define_mosaic(global_indices, layout2D, domain, nregions, num_contact, tile1, tile2, &
+                    istart1, iend1, jstart1, jend1, istart2, iend2, jstart2, jend2,      &
+                    pe_start=pe_start, pe_end=pe_end, symmetry=is_symmetry,              &
+                    shalo = ng, nhalo = ng, whalo = ng, ehalo = ng,                      &
+                    xextent=xextent, yextent=yextent, tile_id=tile_id, name = type)
+               call mpp_define_mosaic(global_indices, layout2D, domain_for_coupler, nregions, num_contact, tile1, tile2, &
+                    istart1, iend1, jstart1, jend1, istart2, iend2, jstart2, jend2,                  &
+                    pe_start=pe_start, pe_end=pe_end, symmetry=is_symmetry,                          &
+                    shalo = 1, nhalo = 1, whalo = 1, ehalo = 1,                                      &
+                    xextent=xextent, yextent=yextent, tile_id=tile_id, name = type)
+               deallocate(xextent, yextent)
+            else
             call mpp_define_mosaic(global_indices, layout2D, domain, nregions, num_contact, tile1, tile2, &
                  istart1, iend1, jstart1, jend1, istart2, iend2, jstart2, jend2,      &
                  pe_start=pe_start, pe_end=pe_end, symmetry=is_symmetry,              &
@@ -646,6 +689,7 @@ contains
                  istart1, iend1, jstart1, jend1, istart2, iend2, jstart2, jend2,                  &
                  pe_start=pe_start, pe_end=pe_end, symmetry=is_symmetry,                          &
                  shalo = 1, nhalo = 1, whalo = 1, ehalo = 1, tile_id=tile_id, name = type)
+            endif
             deallocate(tile_id)
             call mpp_define_io_domain(domain, io_layout)
             call mpp_define_io_domain(domain_for_coupler, io_layout)
