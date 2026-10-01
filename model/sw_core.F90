@@ -3127,12 +3127,12 @@ end subroutine ytp_v
               vc(i,j) = vt(i,j)*sin_sg(i,j,2)
            end if
         enddo
-      elseif ( j==0 .or. j==(npy-1) .and. .not. nested  ) then
+      elseif ( (j==0 .or. j==(npy-1)) .and. .not. nested  ) then
         do i=is-1,ie+1
            vc(i,j) = c1*vtmp(i,j-2) + c2*vtmp(i,j-1) + c3*vtmp(i,j)
            vt(i,j) = (vc(i,j) - u(i,j)*cosa_v(i,j))*rsin_v(i,j)
         enddo
-      elseif ( j==2 .or. j==(npy+1)  .and. .not. nested ) then
+      elseif ( (j==2 .or. j==(npy+1))  .and. .not. nested ) then
         do i=is-1,ie+1
            vc(i,j) = c1*vtmp(i,j+1) + c2*vtmp(i,j) + c3*vtmp(i,j-1)
            vt(i,j) = (vc(i,j) - u(i,j)*cosa_v(i,j))*rsin_v(i,j)
