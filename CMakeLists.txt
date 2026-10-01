@@ -35,6 +35,7 @@ set (srcs
   model/nh_utils.F90
   model/nh_core.F90
   model/dyn_core.F90
+  model/fv_bounded_halo.F90
   model/fv_tracer2d.F90
   model/fv_dynamics.F90
   tools/fv_io.F90
