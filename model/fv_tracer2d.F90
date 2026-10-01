@@ -1057,7 +1057,16 @@ subroutine offline_tracer_advection(q, ple0, ple1, mfx, mfy, cx, cy, &
        !   !---------------
        !   q(is:ie,js:je,1:npz,iq) = q3(is:ie,js:je,1:npz,iq) * scalingFactor
        !enddo
-       if (rescale_trop_only) then
+       if (gridstruct%bounded_domain) then
+          ! GCHP regional: no rescaling. Its single domain-wide factor makes the
+          ! tracer mass on the met air equal that on the advected air, which
+          ! conserves mass on the closed global domain. A bounded domain has no
+          ! closed budget (air and tracer flow through its edges, and the
+          ! buffer zone is reset to boundary conditions), and the factor would
+          ! change even a uniform mixing ratio wherever the met air mass
+          ! disagrees with the fluxes.
+          q(is:ie,js:je,1:npz,1:nq) = q3(is:ie,js:je,1:npz,1:nq)
+       elseif (rescale_trop_only) then
           do iq=1,nq
              scalingFactor = calcScalingFactorTrop(q3(is:ie,js:je,1:npz,iq), dp2, ple1,&
                                                    npx, npy, npz, gridstruct, kStart, bd)
