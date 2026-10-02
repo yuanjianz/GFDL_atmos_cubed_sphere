@@ -85,6 +85,11 @@ logical, parameter :: show_scaling=.False.
 
 public :: tracer_2d, tracer_2d_nested, tracer_2d_1L, offline_tracer_advection
 
+! GCHP: print the tracer Courant number and sub-steps every call (tracer_2d,
+! which offline advection uses, and tracer_2d_1L; set by
+! AdvCore from LOG_TRACER_SUBSTEPS in GCHP.rc)
+logical, public :: log_tracer_substeps = .false.
+
 real, allocatable, dimension(:,:,:) :: nest_fx_west_accum, nest_fx_east_accum, nest_fx_south_accum, nest_fx_north_accum
 
 contains
@@ -200,6 +205,13 @@ subroutine tracer_2d_1L(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, n
   enddo  ! k-loop
 
   call mp_reduce_max(cmax,npz)
+
+  ! level k is sub-stepped int(1 + cmax(k)) times (below)
+  if ( log_tracer_substeps .and. is_master() ) then
+     write(*,'(a,f8.4,a,i3,a,i3,a,i3)') 'Tracer_2d_1L: max Courant ', maxval(cmax), &
+          ' at k=', maxloc(cmax,1), '; levels sub-stepped: ', count(int(1. + cmax) > 1), &
+          '; max sub-steps: ', int(1. + maxval(cmax))
+  endif
 
 !$OMP parallel do default(none) shared(is,ie,js,je,isd,ied,jsd,jed,npz,cx,xfx, &
 !$OMP                                  cy,yfx,mfx,mfy,cmax,mfx2,mfy2,cx2,cy2)   &
@@ -455,8 +467,17 @@ subroutine tracer_2d(q, dp1, mfx, mfy, cx, cy, gridstruct, bd, domain, npx, npy,
       endif
       nsplt = int(1. + c_global)
       if ( is_master() .and. nsplt > 4 )  write(*,*) 'Tracer_2d_split=', nsplt, c_global
+      ! level k is sub-stepped ksplt(k) = int(1 + cmax(k)) times (below)
+      if ( log_tracer_substeps .and. is_master() ) then
+         write(*,'(a,f8.4,a,i3,a,i3,a,i3)') 'Tracer_2d: max Courant ', c_global, &
+              ' at k=', maxloc(cmax,1), '; levels sub-stepped: ', count(int(1. + cmax) > 1), &
+              '; max sub-steps: ', nsplt
+      endif
    else
       nsplt = q_split
+      if ( log_tracer_substeps .and. is_master() ) then
+         write(*,'(a,i3,a)') 'Tracer_2d: q_split = ', q_split, ' sub-steps (fixed)'
+      endif
    endif
 
 !--------------------------------------------------------------------------------
